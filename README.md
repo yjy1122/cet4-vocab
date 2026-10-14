@@ -228,8 +228,10 @@ Git 装在 `.tooling\git`，**没有写进系统 PATH、不需要管理员权限
 
 1. **建空仓库**：GitHub 网页 → New repository → 名字随意（建议 `cet4-vocab`）→ **Private** → **不要**勾选 "Add a README" / ".gitignore" / "license"（会让首次推送冲突）。记下 `用户名/仓库名`。
 2. **建 token**：Settings → Developer settings → **Fine-grained tokens** → Generate new token
-   - Repository access：Only select repositories → 选刚才那个仓库
-   - Permissions → Contents：**Read and write**（想看构建日志再加 Actions: Read-only）
+   - Repository access：Only select repositories → 选刚才那个仓库（或直接 All repositories）
+   - Permissions → Contents：**Read and write**
+   - Permissions → **Workflows**：**Read and write** ← 少了这项必定失败。仓库里有 `.github/workflows/android.yml`，GitHub 服务端会直接 `remote rejected`：`refusing to allow a Personal Access Token to create or update workflow ... without workflow scope`。这个限制只在**真推送**时才触发，`push --dry-run` 会照样通过，别被误导。
+   - （想看构建日志再加 Actions: Read-only；用 Tokens (classic) 就勾 `repo` + `workflow`）
    - 复制好 token（只显示一次）
 3. **推送**：
 

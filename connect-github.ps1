@@ -104,15 +104,30 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host "推送 $Branch …" -ForegroundColor Cyan
-& $g -C $root push -u origin $Branch 2>&1 | ForEach-Object { "  $_" }
+$pushLog = (& $g -C $root push -u origin $Branch 2>&1 | Out-String) -replace 'github_pat_[A-Za-z0-9_]+', '<TOKEN>'
+Write-Host $pushLog
 if ($LASTEXITCODE -eq 0) {
   Write-Host "✅ 推送成功" -ForegroundColor Green
   Write-Host "   仓库：  $url"
   Write-Host "   自动构建：$url/actions        （Actions 跑完在 Artifacts 下载 app-debug.apk）"
-} else {
-  Write-Host "❌ 推送失败（退出码 $LASTEXITCODE）。常见原因：" -ForegroundColor Red
+  exit 0
+}
+
+# ---------- 5. 失败分类 ----------
+# dry-run 过不了 = 权限或网络；dry-run 过了但正式推送被 remote rejected，
+# 基本是 GitHub 服务端推送策略（workflow 范围、邮箱校验、分支保护）。
+if ($pushLog -match '(?i)without .workflow. scope|refusing to allow a Personal Access Token') {
+  Write-Host "❌ 缺 workflow 范围：仓库里有 .github/workflows/*.yml，GitHub 要求 token 明确授权才能写。" -ForegroundColor Red
+  Write-Host "   Fine-grained token → Edit → Repository permissions → 搜 'Workflows' → 选 'Read and write' → Save。" -ForegroundColor Yellow
+  Write-Host "   （Tokens (classic) 就勾 'workflow' 那个复选框。）" -ForegroundColor Yellow
+  Write-Host "   保存后重跑本脚本即可，不用重建仓库。" -ForegroundColor Yellow
+  exit 3
+}
+Write-Host "❌ 推送失败（退出码 $LASTEXITCODE）。常见原因：" -ForegroundColor Red
   Write-Host "   1) 仓库还没在 GitHub 网页上创建（git 不能替你建空仓库）"
   Write-Host "   2) token 权限不够或已过期（Fine-grained 要选中这个仓库 + Contents: Write）"
   Write-Host "   3) 代理掉线：先确认 127.0.0.1:10808 在监听"
   Write-Host "   4) 远端已有提交历史：先 .\git.ps1 pull origin main --rebase 或改用 --force（会覆盖远端，慎用）"
-}
+  Write-Host "   5) 缺 workflow 范围（本仓库有 .github/workflows/android.yml，见上面专门提示）"
+  Write-Host "   6) 提交邮箱不是 GitHub 已验证邮箱：.\git.ps1 config user.email <你的邮箱>"
+

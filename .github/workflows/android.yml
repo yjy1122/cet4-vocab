@@ -42,7 +42,11 @@ jobs:
         run: npx --yes cap sync android
 
       - name: 用 assets/icon.png 生成图标与开屏图
-        run: npx --yes capacitor-assets generate --android --iconPath assets/icon.png --splashPath assets/splash.png
+        # 包名是 @capacitor/assets（不是 capacitor-assets）；本机因为 sharp 装不上
+        # 已把它移出依赖，CI 上临时拉取即可。图标生成失败不该拖垮 APK 产物，
+        # 所以 continue-on-error：最坏情况用 Capacitor 默认图标出包。
+        continue-on-error: true
+        run: npx --yes @capacitor/assets@3 generate --android
 
       - name: 编译 APK
         run: |
