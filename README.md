@@ -168,6 +168,8 @@ node _tools/audit-wiring.mjs          # JS 语法 + 全部 #id 选择器对账
 node _tools/xref.mjs                  # 跨模块引用对账（抓"开机即抛"的名字错）
 powershell -ExecutionPolicy Bypass -File _tools\check-workflow.ps1 -SelfTest
                                       # 校验 CI 配置；-SelfTest 故意破坏它，验证这条检查真有牙
+node _tools/device-smoke.mjs --shots  # 装了模拟器/真机时：14 条端到端断言，全程真实点击
+                                      # （--selftest 是同一条负向对照）
 ```
 
 ---

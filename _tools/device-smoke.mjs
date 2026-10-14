@@ -124,7 +124,8 @@ execFileSync(ADB, ["connect", SERIAL], { encoding: "utf8", stdio: ["ignore", "pi
 if (!run(ADB, ["devices"]).split("\n").some((l) => l.trim().startsWith(SERIAL) && /\sdevice$/.test(l.trim())))
   die("设备不在线（" + SERIAL + "）");
 
-console.log("\n[1/4] 安装 + 清空数据（要可预期的 127 词基线）");
+console.log("\n[1/4] 彻底卸载后安装（pm clear 不清 app_webview，会跑到上一版缓存资源上）");
+adbSoft("uninstall", PKG);
 if (!/Success/.test(adb("install", "-r", "-g", ascii(APK)))) die("安装失败");
 adb("shell", "pm", "clear", PKG);
 console.log("[2/4] 启动并等首屏就绪");

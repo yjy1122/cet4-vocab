@@ -112,6 +112,27 @@ python -m http.server 8080 -d www
 2. **AI 直连在 App 里同样受 CORS 限制**。Capacitor 的页面源是 `https://localhost`，云端 API 一般不放行跨域，所以「直连补全」可能仍失败——**复制粘贴桥**在 App 里照常可用。要真正在 App 内直连，需要再加 `@capacitor/http` 或自建一个转发层（说一声我就接）。
 3. **拍照录入**在 App 里会调起系统相机（`<input accept="image/*">` 由 WebView 接管），但识别仍需支持视觉的模型。
 
+## 在模拟器/真机上跑端到端测试
+
+仓库带了一个设备冒烟测试（MuMu 实测，Android 15 / x86_64 / 1080×1920）：
+
+```powershell
+node _tools\device-smoke.mjs --shots        # 14 条断言，全程真实点击
+node _tools\device-smoke.mjs --selftest     # 负向对照：确认这套检查真的会失败
+```
+
+它不依赖 WebView 调试通道（MuMu 的系统 WebView 即使 `webContentsDebuggingEnabled=true` 也不建 devtools socket，`/proc/net/unix` 里 0 个条目），而是用 `uiautomator` 无障碍树**按文字与 resource-id 定位**，每次点击前重新 dump，因此对旋转和分辨率免疫。
+
+四个实测踩到的坑，记在这里免得下次重找：
+
+1. **`pm clear` 不清 `app_webview`**：装了新 APK，WebView 仍在跑上一版的 JS/CSS，症状是"代码明明改了、行为没变"，能把人引到完全错误的结论上。脚本现在先 `adb uninstall` 再 install。
+2. **`uiautomator dump` 写完文件后以 139（SIGSEGV）退出**：按退出码判失败就会永远拿到空树，于是所有断言一起假红。脚本不看退出码，只看拉回来的文件是否可用。
+3. **adb 的 Windows 构建处理含中文的路径会静默失败**：`install` / `pull` 的路径一律走 ASCII 联接 `D:\noadic-build`。
+4. **无障碍树的 `enabled` 会给过期值**：所以断言只查**行为**（点得动、词数回来、再点不破坏数据），不查状态位。
+
+> 顺带一条真机才暴露的产品缺陷（已修）：`撤销上次改动` 原先用 `disabled` 表达"没得撤销"，删完一整单元后快照明明躺在 localStorage 里（`run-as` 读到 `noadic.undo`，总量仅 312 KB，远未达配额），按钮却仍是禁用态——**最需要撤销的时刻点不动**。现在按钮恒可点，无事时由 toast 明确说明。
+
+
 ## 想上正式签名包
 
 ```powershell
