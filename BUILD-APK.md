@@ -37,8 +37,8 @@
 4. 约 **1–2 分钟**后 Job 结束，APK 会**自动发布到仓库的 Releases**：
    - `latest-debug`（预发布）＝ 每次 push 自动覆盖的最新包，日常装这个；
    - 你打的 `v*` 标签 ＝ 冻结版本；
-   - Actions 里的 Artifacts `cet4-vocab-debug-apk` 仍然保留，作为每次 run 的原始留档。
-5. 直接下载：`https://github.com/你的用户名/cet4-vocab/releases/download/latest-debug/app-debug.apk`（公开库不用登录）→ 传到手机 → 点击安装 → 允许「安装未知来源应用」。debug 包无需签名、无需上架。
+   - Actions 里的 Artifacts `noadic-debug-apk` 仍然保留，作为每次 run 的原始留档。
+5. 直接下载：`https://github.com/你的用户名/noadic/releases/download/latest-debug/app-debug.apk`（公开库不用登录）→ 传到手机 → 点击安装 → 允许「安装未知来源应用」。debug 包无需签名、无需上架。
 
 以后改完代码只要重新 push，APK 自动重新构建**并更新到 Release**。发正式版：`.\git.ps1 tag -a v1.0 -m "v1.0"` 然后 `.\git.ps1 push origin v1.0`。
 
@@ -63,7 +63,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\_tools\toolchain-and-build
 | 6 | 图标/开屏：先试 `@capacitor/assets`，失败则用 `_tools\android-res.py`（Pillow）直接写 `res/mipmap-*` | — |
 | 7 | `gradlew assembleDebug`（Gradle 缓存放 `.tooling\gradle`） | ~600 MB |
 
-产物复制到 **`dist\cet4-vocab-debug.apk`**，全程日志在 **`.tooling\build.log`**（出错先看它）。
+产物复制到 **`dist\noadic-debug.apk`**，全程日志在 **`.tooling\build.log`**（出错先看它）。
 
 > 前提：能访问 `api.adoptium.net`、`dl.google.com`、`registry.npmjs.org`。这台机器设了本地代理 `127.0.0.1:10808`，且**代理客户端离线时 TLS 会直接断**——自己开终端跑之前，先确认代理在线（必要时 `$env:HTTPS_PROXY="http://127.0.0.1:10808"`）。
 
@@ -115,6 +115,6 @@ python -m http.server 8080 -d www
 ## 想上正式签名包
 
 ```powershell
-keytool -genkey -v -keystore cet4.keystore -alias cet4 -keyalg RSA -keysize 2048 -validity 10000
+keytool -genkey -v -keystore noadic.keystore -alias cet4 -keyalg RSA -keysize 2048 -validity 10000
 ```
 然后在 `android/` 里配置签名（Capacitor 生成工程后可用 Android Studio 一键 Sign APK），再 `.\build-apk.ps1 -Release`。个人自用不需要这一步。

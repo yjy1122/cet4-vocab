@@ -51,7 +51,7 @@ Log "已暂存 $cnt 个文件"
 $leak = & $gitExe -C $root ls-files | Where-Object { $_ -match '^(\.tooling|node_modules|android|dist)/' } | Select-Object -First 5
 if ($leak) { Log "⚠ 有不该入库的路径被暂存：$($leak -join ', ')（请检查 .gitignore）" } else { Log "✅ 确认 .tooling / node_modules / android / dist 均未入库" }
 
-& $gitExe -C $root commit -m "CET-4 词汇引擎：两级词库、顺序闯关、题型专项、滑动切词、APK 打包工程" -m "含 www 应用本体、Capacitor 打包配置、便携工具链脚本与 185 项回归测试。" 2>&1 | ForEach-Object { Log "  $_" }
+& $gitExe -C $root commit -m "noadic：两级词库、顺序闯关、题型专项、滑动切词、APK 打包工程" -m "含 www 应用本体、Capacitor 打包配置、便携工具链脚本与 185 项回归测试。" 2>&1 | ForEach-Object { Log "  $_" }
 Log "最近提交：$((& $gitExe -C $root log --oneline -1) -join ' ')"
 Log "工作区状态：$((& $gitExe -C $root status --short | Measure-Object).Count) 个未提交变更"
 

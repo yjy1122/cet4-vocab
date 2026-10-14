@@ -1,6 +1,6 @@
 {
-  "name": "CET-4 词汇引擎",
-  "short_name": "CET-4 词汇",
+  "name": "noadic",
+  "short_name": "noadic",
   "description": "大学英语四级词汇强化：批量录入与去重、按单元顺序学习、四题型轮换考核、错题加权复现、写作与阅读联动。纯本地离线。",
   "start_url": "./index.html",
   "scope": "./",

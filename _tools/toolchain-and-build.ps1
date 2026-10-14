@@ -121,7 +121,7 @@ if (-not (Test-Path -LiteralPath (Join-Path $gdir "bin\gradle.bat"))) { Die "Gra
 Log "      assembleDebug（首次要拉 AGP / AndroidX，耐心等）"
 # AGP 拒绝含非 ASCII 的 Windows 工程路径（目录名"新建文件夹"）。
 # 用目录联接换一条纯 ASCII 路径来构建：不改名、不搬文件，删掉联接即无痕。
-$link = "D:\cet4-build"
+$link = "D:\noadic-build"
 if (-not (Test-Path -LiteralPath $link)) {
   Log "      创建 ASCII 目录联接 $link -> $root"
   cmd /c mklink /J "$link" "$root" | Out-Null
@@ -157,7 +157,7 @@ if ($code -ne 0) { Die "Gradle 构建失败 exit=$code，见 $log" }
 $apk = Get-ChildItem -LiteralPath (Join-Path $root "android\app\build\outputs\apk\debug") -Filter *.apk | Select-Object -First 1
 if (-not $apk) { Die "找不到 APK 产物" }
 New-Item -ItemType Directory -Force -Path (Join-Path $root "dist") | Out-Null
-$dst = Join-Path $root "dist\cet4-vocab-debug.apk"
+$dst = Join-Path $root "dist\noadic-debug.apk"
 Copy-Item -LiteralPath $apk.FullName -Destination $dst -Force
 Log ("✅ 完成：{0}  （{1:N1} MB）" -f $dst, ((Get-Item $dst).Length / 1MB))
 Log "   传到手机点击安装即可（debug 包，自签，无需上架）"

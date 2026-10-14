@@ -3,8 +3,12 @@
  * 纯本地离线：无服务器、无账号、无网络请求（AI 增强为用户主动触发）
  * ========================================================================= */
 const Store = (() => {
-  const KEY = "cet4.engine.v1";
-  const UNDO_KEY = "cet4.engine.undo";
+  const KEY = "noadic.v1";
+  const UNDO_KEY = "noadic.undo";
+  /* 备份文件的应用标识：改名（CET-4 词汇引擎 → noadic）前导出的 json 照样认得进来。
+   * 存储键本身没有做旧键迁移 —— 改名时还没有正式使用过任何数据，留一段永远不会跑的
+   * 搬运代码只是负担。 */
+  const APP_IDS = ["noadic", "cet4-engine"];
 
   const DEFAULT_SETTINGS = {
     daily: 20,
@@ -437,8 +441,12 @@ const Store = (() => {
   }
 
   /* ---------- 导入导出 ---------- */
+  /** 是不是本应用的备份文件（而不是随手抓的 JSON）。老名字的备份照样认。 */
+  function isBackup(obj) {
+    return !!obj && APP_IDS.indexOf(obj.app) >= 0 && Array.isArray(obj.words);
+  }
   function exportJSON() {
-    return JSON.stringify({ app: "cet4-engine", version: 1, exportedAt: new Date().toISOString(), settings: state.settings, words: state.words }, null, 2);
+    return JSON.stringify({ app: "noadic", version: 1, exportedAt: new Date().toISOString(), settings: state.settings, words: state.words }, null, 2);
   }
   function importJSON(text) {
     const p = JSON.parse(text);
@@ -468,7 +476,7 @@ const Store = (() => {
     load, save, rebuild, indexContext, byId, stats, units, unitStats, unitKey, wordsOf, unitOrder, seed, backfill, plan, addAll, commitPlan,
     unitFlags, blockFlags, blockStats, blocks, blockKey, inBlock, wordsOfBlock, resetBlock,
     currentUnit, currentBlock, syncCleared, allCleared, inUnit, gateMet, unclear, resetUnit, labelOrder,
-    snapshot, undo, canUndo, update, remove, scopeWords, scopeStats, removeScope, inScope, setSetting, exportJSON, importJSON, wipe, usage,
+    snapshot, undo, canUndo, update, remove, scopeWords, scopeStats, removeScope, inScope, setSetting, exportJSON, importJSON, isBackup, wipe, usage,
     DEFAULT_SETTINGS,
   };
 })();

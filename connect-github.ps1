@@ -36,7 +36,7 @@ if (Test-Port "127.0.0.1" $proxyPort) {
 # ---------- 2. 证书（CA 路径含中文会被毁码，走 ASCII 联接路径） ----------
 $ca = Join-Path $root ".tooling\git\ucrt64\etc\ssl\certs\ca-bundle.crt"
 if (Test-Path -LiteralPath $ca) {
-  $ascii = $ca.Replace($root, "D:\cet4-build") -replace '\\', '/'
+  $ascii = $ca.Replace($root, "D:\noadic-build") -replace '\\', '/'
   if (-not (Test-Path -LiteralPath $ascii)) { $ascii = $ca -replace '\\', '/' }
   & $g -C $root config --local http.sslBackend openssl
   & $g -C $root config --local http.sslCAInfo $ascii
@@ -46,7 +46,7 @@ if (Test-Path -LiteralPath $ca) {
 # store 文件路径也别含中文（git 通过 sh 调用 helper，中文路径会被毁码），
 # 能用 ASCII 联接路径就用它。
 $credWin = Join-Path $root ".tooling\git-credentials"
-$junction = "D:\cet4-build"
+$junction = "D:\noadic-build"
 if (Test-Path -LiteralPath $junction) {
   $credForGit = ($junction -replace '\\', '/') + "/.tooling/git-credentials"
 } else {

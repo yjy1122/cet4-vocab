@@ -1,7 +1,19 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="96" fill="#0b1220"/>
-  <rect x="40" y="40" width="432" height="432" rx="72" fill="#131c2e" stroke="#2a3854" stroke-width="8"/>
-  <text x="256" y="212" font-family="monospace" font-size="96" font-weight="700" fill="#60a5fa" text-anchor="middle">CET-4</text>
-  <text x="256" y="330" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="88" font-weight="700" fill="#e8eefb" text-anchor="middle">词汇</text>
-  <circle cx="256" cy="404" r="16" fill="#34d399"/>
+  <!-- noadic 品牌标：蓝渐变底 + 白卡 + 字标，与 make-icons.py 生成的 PNG 同一套语言。
+       旧版是深色底 #0b1220，与白色主题的应用本体打架，改名时一并统一。 -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2563EB"/>
+      <stop offset="1" stop-color="#1E40AF"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="96" fill="url(#bg)"/>
+  <rect x="86" y="88" width="340" height="336" rx="34" fill="#ffffff"/>
+  <text x="256" y="216" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif" font-size="74"
+        font-weight="800" fill="#2563EB" text-anchor="middle">noadic</text>
+  <text x="256" y="302" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="50"
+        font-weight="700" fill="#0f172a" text-anchor="middle">不止词典</text>
+  <circle cx="392" cy="398" r="42" fill="#16a34a" stroke="#ffffff" stroke-width="9"/>
+  <path d="M373 398 l13 13 l25 -28" fill="none" stroke="#ffffff" stroke-width="11"
+        stroke-linecap="round" stroke-linejoin="round"/>
 </svg>

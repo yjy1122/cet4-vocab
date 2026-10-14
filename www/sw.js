@@ -1,6 +1,6 @@
 /* sw.js — 手机/离线挂载点（仅在 http(s) 下生效；file:// 打开时不注册）
  * 更新版本改 APP_VERSION，老缓存会被清掉。 */
-const APP_VERSION = "cet4-engine-v2";   // 批量删除（整课/整单元）+ 词库工具栏改动：抬版本清老缓存
+const APP_VERSION = "noadic-v1";   // 改名 noadic + 三级批量删除：抬版本清老缓存
 const SHELL = [
   "./", "./index.html", "./css/app.css", "./manifest.webmanifest", "./icon.svg",
   "./js/seed-words.js", "./js/lexicon.js", "./js/dict-extra.js", "./js/store.js",

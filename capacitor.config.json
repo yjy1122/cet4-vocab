@@ -1,11 +1,11 @@
 {
-  "appId": "com.cet4.vocabengine",
-  "appName": "CET-4 词汇",
+  "appId": "com.noadic.app",
+  "appName": "noadic",
   "webDir": "www",
   "android": {
     "allowMixedContent": false,
     "backgroundColor": "#ffffff",
-    "appendUserAgent": "cet4-app",
+    "appendUserAgent": "noadic-app",
     "webContentsDebuggingEnabled": false
   },
   "server": {

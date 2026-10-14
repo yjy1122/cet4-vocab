@@ -31,8 +31,10 @@ a { color: var(--acc); }
 }
 .brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .brand-mark {
-  font: 700 11px/1 ui-monospace, monospace; letter-spacing: .03em; color: #fff;
-  background: linear-gradient(135deg, var(--acc), #4f46e5); padding: 7px 8px; border-radius: 9px; white-space: nowrap;
+  /* 字标从 "CET-4"（5 字符，等宽好看）换成 "noadic"（小写单词），
+     等宽字体里的小写单词很怪，改用正文字重强调 */
+  font: 800 12.5px/1 system-ui, -apple-system, "Segoe UI", sans-serif; letter-spacing: .01em; color: #fff;
+  background: linear-gradient(135deg, var(--acc), #4f46e5); padding: 6px 9px; border-radius: 9px; white-space: nowrap;
 }
 .brand-txt { display: flex; flex-direction: column; min-width: 0; }
 .brand-txt strong { font-size: 14.5px; }

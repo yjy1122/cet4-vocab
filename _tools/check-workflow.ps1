@@ -67,14 +67,14 @@ New-Item -ItemType Directory -Force -Path $scratchWin | Out-Null
 # Careful: the junction mapping must follow the -Yml argument, not hard-code the real
 # workflow. Hard-coding it made the mutation tests pass vacuously (the checker kept
 # reading the good file no matter what you handed it) -- i.e. a check that can never fail.
-$hasJ = Test-Path "D:\cet4-build"
-$ascr = if ($hasJ) { "D:/cet4-build/.tooling/wf-check" } else { ($scratchWin -replace '\\', '/') }
+$hasJ = Test-Path "D:\noadic-build"
+$ascr = if ($hasJ) { "D:/noadic-build/.tooling/wf-check" } else { ($scratchWin -replace '\\', '/') }
 function To-AsciiPath([string]$p) {
   if (Test-Path -LiteralPath $p -PathType Container) { return ($p -replace '\\', '/') }
   if ($hasJ) {
     $rootN = (Resolve-Path -LiteralPath $root).Path.TrimEnd('\')
     if ($p -like ($rootN + "*")) {
-      return ("D:/cet4-build" + $p.Substring($rootN.Length) -replace '\\', '/')
+      return ("D:/noadic-build" + $p.Substring($rootN.Length) -replace '\\', '/')
     }
   }
   return ($p -replace '\\', '/')
@@ -149,7 +149,7 @@ if ($out -match "BAD:") {
 
 $bash = @(
   (Join-Path $root ".tooling\git\usr\bin\bash.exe"),
-  "D:\cet4-build\.tooling\git\usr\bin\bash.exe"
+  "D:\noadic-build\.tooling\git\usr\bin\bash.exe"
 ) | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
 if (-not $bash) { Write-Host "找不到便携版 bash，跳过 shell 语法检查" -ForegroundColor Yellow; exit 0 }
 

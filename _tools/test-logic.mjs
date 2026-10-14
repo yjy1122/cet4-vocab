@@ -16,6 +16,7 @@ const sandbox = {
     setItem: (k, v) => mem.set(k, String(v)),
     removeItem: (k) => mem.delete(k),
   },
+  __memKeys: () => [...mem.keys()],     // 让测试能断言"写到哪个键上了"（改名回归要用）
 };
 sandbox.window = sandbox;          // 浏览器里 window 就是全局对象：模块用 window.X = ... 暴露、用裸 X 互访
 sandbox.self = sandbox;
@@ -619,14 +620,14 @@ const TEST = String.raw`
 
   await (async function () {
     const realFetch = globalThis.fetch;
-    Store.settings.ai = { baseURL: "https://test.local/v1", model: "cet4-mini", key: "sk-x" };
+    Store.settings.ai = { baseURL: "https://test.local/v1", model: "noadic-mini", key: "sk-x" };
     const mk = (status, body) => ({ ok: status === 200, status, json: async () => body, text: async () => JSON.stringify(body) });
     const cases = [
       ["401 鉴权", mk(401, { error: "bad key" }), "auth"],
       ["404 路径", mk(404, {}), "path"],
       ["429 限流", mk(429, {}), "quota"],
       ["503 服务端", mk(503, {}), "server"],
-      ["200 模型列表", mk(200, { data: [{ id: "cet4-mini" }, { id: "gpt-4o" }] }), "ok"],
+      ["200 模型列表", mk(200, { data: [{ id: "noadic-mini" }, { id: "gpt-4o" }] }), "ok"],
     ];
     for (const [name, res, want] of cases) {
       globalThis.fetch = async () => res;
@@ -758,6 +759,38 @@ const TEST = String.raw`
       return !!(r2.question || r2.empty || r2.done);
     })(), JSON.stringify(Object.keys(Quiz.next())));
     void doomed;
+  })();
+
+  /* ---------- Y 改名 noadic 后的应用标识与存储键 ---------- */
+  (function () {
+    const head = JSON.parse(Store.exportJSON());
+    ok("Y1 备份标识为 noadic", head.app === "noadic", head.app);
+    ok("Y2 备份含 words/settings", Array.isArray(head.words) && !!head.settings, Object.keys(head).join(","));
+    ok("Y3 isBackup 认新标识", Store.isBackup({ app: "noadic", words: [] }) === true, "");
+    ok("Y4 isBackup 兼容改名前的旧备份", Store.isBackup({ app: "cet4-engine", words: [{ word: "a" }] }) === true, "");
+    ok("Y5 isBackup 拒非备份 JSON",
+      Store.isBackup({ words: [] }) === false && Store.isBackup({ app: "noadic" }) === false
+      && Store.isBackup({ app: "other", words: [] }) === false && Store.isBackup(null) === false
+      && Store.isBackup(undefined) === false, "");
+    Store.save();
+    const keys = window.__memKeys();
+    ok("Y6 存储写到 noadic.v1", keys.indexOf("noadic.v1") >= 0, keys.join(","));
+    ok("Y7 不再写改名前的旧存储键", keys.indexOf("cet4.engine.v1") < 0 && keys.indexOf("cet4.engine.undo") < 0,
+      keys.filter((k) => /cet4/.test(k)).join(","));
+    const before = Store.words.length;
+    const legacy = JSON.stringify({ app: "cet4-engine", version: 1, words: [{
+      id: "old_backup_1", word: "oar", unit: "Unit 12", senses: [{ pos: "n.", meaning: "桨" }],
+      definition: "n. 桨", status: "mastered", srs: Lex.freshSrs(),
+    }] });
+    const r = Store.importJSON(legacy);
+    // 注意：导入按词头去重、id 是重新铸造的（备份里的 id 不保留），所以只能按 word 断言
+    const oar = Store.words.find((w) => w.word === "oar");
+    ok("Y8 旧标识备份能导入", r.added === 1 && !!oar && oar.unit === "Unit 12" && oar.id !== "old_backup_1",
+      JSON.stringify({ added: r.added, id: oar && oar.id }));
+    ok("Y9 导入走 app.js 同一判定", Store.isBackup(JSON.parse(legacy)) === true, "");
+    Store.undo();
+    ok("Y10 导入可撤销（快照通道未受改名影响）", !Store.words.some((w) => w.word === "oar") && Store.words.length === before,
+      Store.words.length + "/" + before);
   })();
 
   window.__RESULT__ = R;

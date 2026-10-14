@@ -9,7 +9,7 @@ const AI = (() => {
   const available = () => !!(cfg().baseURL && cfg().baseURL.trim() && cfg().key && cfg().key.trim());
 
   const SPEC = [
-    "你是 CET-4 词汇录入引擎（Mode 1）。必须且仅能输出纯 JSON 字符串，禁止 Markdown 代码块、禁止任何解释文字。",
+    "你是 noadic录入引擎（Mode 1）。必须且仅能输出纯 JSON 字符串，禁止 Markdown 代码块、禁止任何解释文字。",
     "规则：1) 过滤 a/the/is/at 等极简词，但保留其作为核心短语一部分的词；2) 单词统一还原英文原形(Lemma)；",
     "3) 每个词补齐 英式IPA、CET-4 核心考点释义、常见搭配、1 个四级难度例句（含译文）；",
     "4) 若用户已给出中文释义，以用户释义为准，只做补全不得改写；5) 若没有需要收录的词，words 返回空数组且 has_words 为 false。",

@@ -108,7 +108,7 @@ const app = (() => {
       if (/\.json$/i.test(f.name)) {
         const txt = await f.text();
         const head = JSON.parse(txt.slice(0, 4000));
-        if (head && head.app === "cet4-engine") {
+        if (Store.isBackup(head)) {          // 认 app 字段，改名前的旧备份（cet4-engine）也收
           const r = Store.importJSON(txt);
           UI.renderProgress(); UI.renderLibrary(); UI.renderScope();
           return UI.toast(`备份已合并导入：新增 ${r.added}、合并 ${r.merged}、重复 ${r.dup}`);
@@ -470,7 +470,7 @@ const app = (() => {
       const blob = new Blob([Store.exportJSON()], { type: "application/json" });
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
-      a.download = `cet4-词库备份-${new Date().toISOString().slice(0, 10)}.json`;
+      a.download = `noadic-备份-${new Date().toISOString().slice(0, 10)}.json`;
       a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
     };
     $("#btn-import").onchange = onFile;

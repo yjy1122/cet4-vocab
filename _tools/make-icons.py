@@ -32,7 +32,9 @@ def rounded(draw, box, r, fill):
     draw.rounded_rectangle([x0, y0, x1, y1], radius=r, fill=fill)
 
 
-def icon(size=1024):
+def icon(size=1024, mark=False):
+    """mark=True：只画字母标 "n"。16–48px 的 favicon 上，缩小的字标会糊成一团
+    （实测 32px 完全不可读），单字母在那个尺寸才站得住。"""
     img = Image.new("RGB", (size, size), ACCENT)
     d = ImageDraw.Draw(img)
     # 纵向渐变底（干净、无条纹）
@@ -42,19 +44,21 @@ def icon(size=1024):
         d.line([(0, y), (size, y)], fill=col)
     d = ImageDraw.Draw(img)
 
-    m = size * 0.17                      # 安全边距（自适应图标会被裁切）
+    m = size * 0.17 if not mark else size * 0.13   # 安全边距（自适应图标会被裁切）
     card = (m, m * 1.02, size - m, size - m * 1.02)
     rounded(d, card, int(size * 0.06), WHITE)
 
-    # 卡片上的文字：CET-4 + 词汇
-    f_big = font(int(size * 0.155))
-    f_sm = font(int(size * 0.13))
-    d.text(((card[0] + card[2]) / 2, card[1] + (card[3] - card[1]) * 0.30), "CET-4",
-           font=f_big, fill=ACCENT, anchor="mm")
-    d.text(((card[0] + card[2]) / 2, card[1] + (card[3] - card[1]) * 0.66), "词汇",
-           font=f_sm, fill=INK, anchor="mm")
+    if mark:
+        d.text(((card[0] + card[2]) / 2, (card[1] + card[3]) / 2 - size * 0.01), "n",
+               font=font(int(size * 0.52)), fill=ACCENT, anchor="mm")
+    else:
+        # 卡片上的字标：noadic（大字）+ 不止词典（小字）
+        d.text(((card[0] + card[2]) / 2, card[1] + (card[3] - card[1]) * 0.34), "noadic",
+               font=font(int(size * 0.142)), fill=ACCENT, anchor="mm")
+        d.text(((card[0] + card[2]) / 2, card[1] + (card[3] - card[1]) * 0.68), "不止词典",
+               font=font(int(size * 0.098)), fill=INK, anchor="mm")
     # 右下角绿色完成标记
-    r = size * 0.075
+    r = size * (0.095 if mark else 0.075)
     cx, cy = size - m - r * 0.35, card[3] - r * 0.35
     d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=GREEN, outline=WHITE, width=int(size * 0.012))
     d.line([(cx - r * 0.42, cy), (cx - r * 0.08, cy + r * 0.36), (cx + r * 0.45, cy - r * 0.34)],
@@ -73,19 +77,21 @@ def splash(size=2732):
 os.makedirs(os.path.join(ROOT, "assets"), exist_ok=True)
 os.makedirs(os.path.join(ROOT, "www"), exist_ok=True)
 
-icon_1024 = icon(1024)
-icon_1024.save(os.path.join(ROOT, "assets", "icon.png"))
+big = icon(1024)
+big.save(os.path.join(ROOT, "assets", "icon.png"))          # APK 图标源图（CI 由它生成 mipmap）
 splash(2732).save(os.path.join(ROOT, "assets", "splash.png"))
-for s, name in [(512, "icon-512.png"), (192, "icon-192.png"), (180, "apple-touch-icon.png"), (32, "favicon-32.png")]:
-    icon_1024.resize((s, s), Image.LANCZOS).save(os.path.join(ROOT, "www", name))
+# 每个尺寸单独绘制，而不是从 1024 缩：缩放会把字边糊掉
+for s, name in [(512, "icon-512.png"), (192, "icon-192.png"), (180, "apple-touch-icon.png")]:
+    icon(s).save(os.path.join(ROOT, "www", name))
+icon(32, mark=True).save(os.path.join(ROOT, "www", "favicon-32.png"))   # 小尺寸用字母标
 
 # maskable 版：内容缩到 60%，四周留安全区
 mask = Image.new("RGB", (1024, 1024), ACCENT)
-inner = icon_1024.resize((640, 640), Image.LANCZOS)
+inner = big.resize((640, 640), Image.LANCZOS)
 mask.paste(inner, (192, 192))
 mask.resize((512, 512), Image.LANCZOS).save(os.path.join(ROOT, "www", "icon-maskable-512.png"))
 mask.resize((192, 192), Image.LANCZOS).save(os.path.join(ROOT, "www", "icon-maskable-192.png"))
-icon_1024.resize((512, 512), Image.LANCZOS).save(os.path.join(ROOT, "www", "icon-512.png"))
+# （旧版这里还有一行从 1024 缩放写 icon-512.png 的残留，已被上面的逐尺寸绘制取代）
 
 print("assets:", sorted(os.listdir(os.path.join(ROOT, "assets"))))
 print("www pngs:", sorted(f for f in os.listdir(os.path.join(ROOT, "www")) if f.endswith(".png")))

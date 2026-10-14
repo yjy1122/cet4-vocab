@@ -5,9 +5,9 @@
   Usage:  powershell -File _tools\github-post-probe.ps1 -Repo user/repo
 #>
 param(
-  [string]$Repo = "yjy1122/cet4-vocab",
+  [string]$Repo = "yjy1122/noadic",
   [string]$Proxy = "http://127.0.0.1:10808",
-  [string]$CaBundle = "D:\cet4-build\.tooling\git\ucrt64\etc\ssl\certs\ca-bundle.crt",
+  [string]$CaBundle = "D:\noadic-build\.tooling\git\ucrt64\etc\ssl\certs\ca-bundle.crt",
   [switch]$Insecure,
   [int]$TimeoutSec = 25
 )

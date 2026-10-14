@@ -1,4 +1,4 @@
-# CET-4 词汇引擎（浅色 App 界面 · 纯本地离线 · 可封 APK）
+# noadic（浅色 App 界面 · 纯本地离线 · 可封 APK）
 
 零构建、零依赖、零服务器：双击 `www/index.html` 即可运行，所有数据存在浏览器 `localStorage`。白色主题、底部导航栏、设置以底部面板呈现，按手机 App 的形态设计；同一套代码可用 Capacitor 封成 APK（见 `BUILD-APK.md`）。
 
@@ -22,7 +22,7 @@
 │       ├── ui.js               渲染层
 │       └── app.js              装配与事件流
 ├── assets/icon.png, splash.png   APK 图标与开屏图源图（1024 / 2732）
-├── capacitor.config.json   appId com.cet4.vocabengine、webDir www、白色启动背景
+├── capacitor.config.json   appId com.noadic.app、webDir www、白色启动背景
 ├── package.json            Capacitor 依赖与脚本
 ├── build-apk.ps1           本机一键出包（先检查 JDK/SDK，缺什么直说缺什么）
 ├── .github/workflows/android.yml   云构建：push 即出 app-debug.apk 产物
@@ -226,13 +226,13 @@ Git 装在 `.tooling\git`，**没有写进系统 PATH、不需要管理员权限
 这台机器直连 `github.com:443` 是被拒的，必须走本地代理；而 git 有两个坑：
 
 1. **git 不读 Windows 系统代理**（IE/注册表里那个 `127.0.0.1:10808` 它不认），得显式配 `http.proxy`；
-2. **openssl 后端的 CA 证书包路径含中文会被毁码**（`新建文件夹` → `??½??ļ???`），报 `error adding trust anchors`。解法是把 `http.sslCAInfo` 指到 ASCII 联接路径 `D:/cet4-build/...`。
+2. **openssl 后端的 CA 证书包路径含中文会被毁码**（`新建文件夹` → `??½??ļ???`），报 `error adding trust anchors`。解法是把 `http.sslCAInfo` 指到 ASCII 联接路径 `D:/noadic-build/...`。
 
 两条已经写进本仓库的 `.git/config`（local，不影响其它项目），实测 `git ls-remote https://github.com/git/git` 正常返回。**前提是代理客户端在线**（脚本会先探测 `127.0.0.1:10808`）。
 
 ### 你要做的三步
 
-1. **建空仓库**：GitHub 网页 → New repository → 名字随意（建议 `cet4-vocab`）→ **公开/私有都行**（本仓库只有代码和种子词表，你的学习记录、错题本全在设备 localStorage 里，不会进仓库）→ **不要**勾选 "Add a README" / ".gitignore" / "license"（会让首次推送冲突）。记下 `用户名/仓库名`。
+1. **建空仓库**：GitHub 网页 → New repository → 名字随意（建议 `noadic`）→ **公开/私有都行**（本仓库只有代码和种子词表，你的学习记录、错题本全在设备 localStorage 里，不会进仓库）→ **不要**勾选 "Add a README" / ".gitignore" / "license"（会让首次推送冲突）。记下 `用户名/仓库名`。
 2. **建 token**：Settings → Developer settings → **Fine-grained tokens** → Generate new token
    - Repository access：Only select repositories → 选刚才那个仓库（或直接 All repositories）
    - Permissions → Contents：**Read and write**
@@ -243,12 +243,12 @@ Git 装在 `.tooling\git`，**没有写进系统 PATH、不需要管理员权限
 
 ```powershell
 cd "D:\Users\DawnFish\Desktop\新建文件夹"
-.\connect-github.ps1 -Repo 你的用户名/cet4-vocab
+.\connect-github.ps1 -Repo 你的用户名/noadic
 ```
 
 脚本会提示粘 token（**不回显**），只写进 `.tooling\git-credentials`（`.gitignore` 已排除，不会进仓库），然后加 `origin` 并推 `main`。
 
-推成功后打开 **`https://github.com/你的用户名/cet4-vocab/actions`** —— 仓库里现成的 workflow 会自动构建（约 90 秒），构建完**直接发布到 Release**，不用再去 Artifacts 里翻 zip。
+推成功后打开 **`https://github.com/你的用户名/noadic/actions`** —— 仓库里现成的 workflow 会自动构建（约 90 秒），构建完**直接发布到 Release**，不用再去 Artifacts 里翻 zip。
 
 ### APK 从哪下（两条都自动）
 
@@ -256,13 +256,13 @@ cd "D:\Users\DawnFish\Desktop\新建文件夹"
 | --- | --- | --- |
 | **Releases → `latest-debug`** | `app-debug.apk` | 每次 `git push` 后**自动覆盖**，永远指向最新构建；标记为预发布，因为它是 debug 签名 |
 | **Releases → 你打的 `v*` 标签** | `app-debug.apk` | 冻结的某个版本，标记为正式（会占住仓库页的 "Latest" 按钮） |
-| Actions → Artifacts → `cet4-vocab-debug-apk` | 同上 | 每次 run 的原始产物留档，需要历史某次构建时才用 |
+| Actions → Artifacts → `noadic-debug-apk` | 同上 | 每次 run 的原始产物留档，需要历史某次构建时才用 |
 
 日常装机就用第一个，直链（公开库，不用登录也能下）：
 
 ```
-https://github.com/你的用户名/cet4-vocab/releases/tag/latest-debug                 ← 永远最新构建
-https://github.com/你的用户名/cet4-vocab/releases/download/latest-debug/app-debug.apk
+https://github.com/你的用户名/noadic/releases/tag/latest-debug                 ← 永远最新构建
+https://github.com/你的用户名/noadic/releases/download/latest-debug/app-debug.apk
 ```
 
 > `/releases/latest` 这个"最新正式版"地址**只在存在非预发布的版本 Release 时才有效**：只有 `latest-debug`（预发布）时它会返回 404（实测）。等你按下面打第一个 `v*` 标签，它才指向你的最新版。
@@ -270,7 +270,7 @@ https://github.com/你的用户名/cet4-vocab/releases/download/latest-debug/app
 发一个正式版本，只要打个 `v` 开头的标签再推上去，CI 会顺带把 Release 建好：
 
 ```powershell
-.\git.ps1 tag -a v1.0 -m "CET-4 词汇引擎 v1.0"
+.\git.ps1 tag -a v1.0 -m "noadic v1.0"
 .\git.ps1 push origin v1.0
 ```
 
@@ -283,7 +283,7 @@ https://github.com/你的用户名/cet4-vocab/releases/download/latest-debug/app
 Gitee 走同一代理**当前也通**（`git ls-remote https://gitee.com/mirrors/git.git` 实测成功），国内速度更稳，适合纯备份：
 
 ```powershell
-.\git.ps1 remote add gitee https://gitee.com/你的用户名/cet4-vocab.git
+.\git.ps1 remote add gitee https://gitee.com/你的用户名/noadic.git
 .\git.ps1 push -u gitee main
 ```
 

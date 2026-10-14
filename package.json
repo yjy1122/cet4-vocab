@@ -1,8 +1,8 @@
 {
-  "name": "cet4-vocab-engine",
+  "name": "noadic",
   "version": "1.0.0",
   "private": true,
-  "description": "CET-4 词汇引擎：录入去重 / 按单元顺序学习 / 四题型考核 / 错题闭环（纯本地离线，Capacitor 封装为 Android APK）",
+  "description": "noadic：录入去重 / 按单元顺序学习 / 四题型考核 / 错题闭环（纯本地离线，Capacitor 封装为 Android APK）",
   "main": "index.js",
   "scripts": {
     "sync": "cap sync android",

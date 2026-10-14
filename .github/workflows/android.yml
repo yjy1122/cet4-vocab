@@ -59,7 +59,7 @@ jobs:
       - name: 上传 APK 产物
         uses: actions/upload-artifact@v4
         with:
-          name: cet4-vocab-debug-apk
+          name: noadic-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
 
@@ -89,10 +89,10 @@ jobs:
             TAG="$REF_NAME"
             if gh release view "$TAG" >/dev/null 2>&1; then
               echo "Release $TAG 已存在，覆盖其 APK 资产"
-              gh release edit "$TAG" --title "CET-4 词汇引擎 $TAG" --notes "$NOTES"
+              gh release edit "$TAG" --title "noadic $TAG" --notes "$NOTES"
               gh release upload "$TAG" "$APK" --clobber
             else
-              gh release create "$TAG" "$APK" --title "CET-4 词汇引擎 $TAG" --notes "$NOTES"
+              gh release create "$TAG" "$APK" --title "noadic $TAG" --notes "$NOTES"
             fi
           else
             TAG=latest-debug
