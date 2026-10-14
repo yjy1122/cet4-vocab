@@ -110,5 +110,8 @@ jobs:
             fi
           fi
           echo "✅ 已发布： ${{ github.server_url }}/${{ github.repository }}/releases/tag/$TAG"
-          gh release view "$TAG" --json tagName,prerelease,assets \
-            --jq '"   资产: " + (.assets | map(.name + " (" + (.size | tostring) + " B)") | join(", "))'
+          # gh 的字段名是 isPrerelease（不是 prerelease），写错会被 set -e 判成整步失败；
+          # 诊断信息不该有权搞红构建，所以再兜一层 || true。
+          gh release view "$TAG" --json tagName,isPrerelease,assets \
+            --jq '"   资产: " + (.assets | map(.name + " " + (.size | tostring) + " B") | join(", "))' \
+            || echo "（资产列表打印失败，不影响发布本身）"
