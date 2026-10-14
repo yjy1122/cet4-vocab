@@ -1,4 +1,8 @@
-# noadic（浅色 App 界面 · 纯本地离线 · 可封 APK）
+# noadic（not only a dictionary · 浅色 App 界面 · 纯本地离线 · 可封 APK）
+
+名字取意 **n**ot **o**nly **a** **dic**tionary：它不是一本查词字典，而是"录入 → 按书顺序学 → 考核 → 错题闭环"的一台学习引擎（中文界面里显示为「不止词典」）。
+
+> 旧名 `CET-4 词汇引擎` / 仓库 `cet4-vocab`。改名后的差异只在标识：包名 `com.noadic.app`、存储键 `noadic.v1`、SW 缓存 `noadic-v1`。**旧版 APK 与新版是两个不同的应用**（包名不同，不能覆盖安装，数据不互通）；要搬数据就用应用内「设置 → 导出词库」再在新版导入。改名前导出的 `.json` 备份仍然能直接导入（`app` 字段兼容 `cet4-engine`）。
 
 零构建、零依赖、零服务器：双击 `www/index.html` 即可运行，所有数据存在浏览器 `localStorage`。白色主题、底部导航栏、设置以底部面板呈现，按手机 App 的形态设计；同一套代码可用 Capacitor 封成 APK（见 `BUILD-APK.md`）。
 
