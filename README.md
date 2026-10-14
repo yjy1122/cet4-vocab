@@ -248,7 +248,35 @@ cd "D:\Users\DawnFish\Desktop\新建文件夹"
 
 脚本会提示粘 token（**不回显**），只写进 `.tooling\git-credentials`（`.gitignore` 已排除，不会进仓库），然后加 `origin` 并推 `main`。
 
-推成功后打开 **`https://github.com/你的用户名/cet4-vocab/actions`** —— 仓库里现成的 workflow 会自动构建，几分钟后在 **Artifacts** 下载 `cet4-vocab-debug-apk`，解压得到可直接安装的 APK。以后每次 `.\git.ps1 push` 都会重新出一个。
+推成功后打开 **`https://github.com/你的用户名/cet4-vocab/actions`** —— 仓库里现成的 workflow 会自动构建（约 90 秒），构建完**直接发布到 Release**，不用再去 Artifacts 里翻 zip。
+
+### APK 从哪下（两条都自动）
+
+| 入口 | 内容 | 说明 |
+| --- | --- | --- |
+| **Releases → `latest-debug`** | `app-debug.apk` | 每次 `git push` 后**自动覆盖**，永远指向最新构建；标记为预发布，因为它是 debug 签名 |
+| **Releases → 你打的 `v*` 标签** | `app-debug.apk` | 冻结的某个版本，标记为正式（会占住仓库页的 "Latest" 按钮） |
+| Actions → Artifacts → `cet4-vocab-debug-apk` | 同上 | 每次 run 的原始产物留档，需要历史某次构建时才用 |
+
+日常装机就用第一个，直链（公开库，不用登录也能下）：
+
+```
+https://github.com/你的用户名/cet4-vocab/releases/tag/latest-debug                 ← 永远最新构建
+https://github.com/你的用户名/cet4-vocab/releases/download/latest-debug/app-debug.apk
+```
+
+> `/releases/latest` 这个"最新正式版"地址**只在存在非预发布的版本 Release 时才有效**：只有 `latest-debug`（预发布）时它会返回 404（实测）。等你按下面打第一个 `v*` 标签，它才指向你的最新版。
+
+发一个正式版本，只要打个 `v` 开头的标签再推上去，CI 会顺带把 Release 建好：
+
+```powershell
+.\git.ps1 tag -a v1.0 -m "CET-4 词汇引擎 v1.0"
+.\git.ps1 push origin v1.0
+```
+
+标签必须 `v` 开头（workflow 里 `on.push.tags: ['v*']`）。删掉一个版本：`.\git.ps1 tag -d v1.0` + 在网页上删对应 Release（或用 API 删 `git/refs/tags/v1.0`）。
+
+> 覆盖安装不丢数据：学习记录、词库、错题本都在应用本地存储里，debug 签名一致，所以新版本直接装上就是接着用。debug 签名仅供自用，不要上架商店。
 
 ### 备选：Gitee
 

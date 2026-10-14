@@ -33,11 +33,14 @@
    .gitignore
    ```
    不要上传 `node_modules/`、`android/`（由 CI 现场生成）。没有 git 就用网页的 **Add file → Upload files**，或装个 GitHub Desktop。
-3. 仓库页 → **Actions** → 选「构建 Android APK」→ **Run workflow**（push 也会自动触发）。
-4. 约 5–10 分钟后，Job 结束 → **Artifacts** 里下载 `cet4-vocab-debug-apk`，解压得 `app-debug.apk`。
-5. 传到手机 → 点击安装 → 允许「安装未知来源应用」。debug 包无需签名、无需上架。
+3. 仓库页 → **Actions** → 选「构建 Android APK」→ **Run workflow**（push 也会自动触发；打 `v*` 标签会额外出一个正式版本 Release）。
+4. 约 **1–2 分钟**后 Job 结束，APK 会**自动发布到仓库的 Releases**：
+   - `latest-debug`（预发布）＝ 每次 push 自动覆盖的最新包，日常装这个；
+   - 你打的 `v*` 标签 ＝ 冻结版本；
+   - Actions 里的 Artifacts `cet4-vocab-debug-apk` 仍然保留，作为每次 run 的原始留档。
+5. 直接下载：`https://github.com/你的用户名/cet4-vocab/releases/download/latest-debug/app-debug.apk`（公开库不用登录）→ 传到手机 → 点击安装 → 允许「安装未知来源应用」。debug 包无需签名、无需上架。
 
-以后改完代码只要重新 push，APK 自动重新构建。
+以后改完代码只要重新 push，APK 自动重新构建**并更新到 Release**。发正式版：`.\git.ps1 tag -a v1.0 -m "v1.0"` 然后 `.\git.ps1 push origin v1.0`。
 
 ## 路线 B：本机出包（便携工具链，不装进系统）
 
