@@ -25,11 +25,15 @@ if ($SelfTest) {
   $dir = Join-Path $root ".tooling\wf-check"
   New-Item -ItemType Directory -Force -Path $dir | Out-Null
   $cases = @(
-    @{ n = "shell 少一个引号"; find = 'if [ "$REF_TYPE" = "tag" ]; then'; repl = 'if [ "$REF_TYPE" = "tag ; then'; want = 3 },
+    # 变异目标必须"必然坏"：原来这条把 then 前的引号改坏，结果发布步骤里引号太多，
+    # 那半个引号和后面的引号自己配上了对，bash -n 照样通过 —— 变异成了空操作。
+    # 换成删掉一个花括号：无论上下文有什么引号都必然报语法错。
+    @{ n = "shell 少一个花括号"; find = 'test -f "$APK" || { echo "::error::找不到 APK：$APK"; exit 1; }'; repl = 'test -f "$APK" || { echo "::error::找不到 APK：$APK"; exit 1;'; want = 3 },
     @{ n = "if 结构不闭合";   find = 'set -euo pipefail';                repl = "set -euo pipefail`n          fi";           want = 3 },
     @{ n = "删掉 push.tags";  find = "    tags: ['v*']";                 repl = "";                                  want = 2 },
     @{ n = "contents 只读";   find = "  contents: write";                repl = "  contents: read";                want = 2 },
-    @{ n = "删掉发布步骤名";   find = "发布到 GitHub Release";             repl = "打个包";                            want = 2 }
+    @{ n = "删掉发布步骤名";   find = "发布到 GitHub Release";             repl = "打个包";                            want = 2 },
+    @{ n = "发布说明改回内联（脱离 CHANGELOG）"; find = '--notes-file "$NOTES"'; repl = '--notes "$NOTES"'; want = 2 }
   )
   $bad = 0
   foreach ($c in $cases) {
@@ -121,6 +125,11 @@ else:
             bad.append("release step never references " + var)
     if "gh release" not in txt:
         bad.append("release step does not call gh release")
+    # 发布说明必须来自 CHANGELOG.md：两处各写一套字，早晚会对不上
+    if "--notes-file" not in txt:
+        bad.append("release step uses inline --notes instead of --notes-file -> 发布说明脱离 CHANGELOG")
+    if "CHANGELOG.md" not in txt:
+        bad.append("release step never reads CHANGELOG.md -> 更新日志不再是 Release 正文的真源")
 
 up = [s for s in steps if "upload-artifact" in str(s.get("uses", ""))]
 if not up:

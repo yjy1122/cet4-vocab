@@ -91,26 +91,48 @@ jobs:
           test -f "$APK" || { echo "::error::找不到 APK：$APK"; exit 1; }
           SHORT=$(git rev-parse --short HEAD)
           SIZE=$(du -h "$APK" | cut -f1)
-          NOTES="构建自 \`${REF_NAME}@${SHORT}\`，APK ${SIZE}。
 
-          装法：手机直接安装；覆盖旧版本不会丢数据（学习记录、词库、错题本都在应用本地存储里，debug 签名一致）。
+          # 发布说明的正文来自 CHANGELOG.md 对应版本那一段 —— 更新日志只有一份，
+          # Release 上的字不能和仓库里的字各说各话。标签 v1.2.0 对应 [1.2.0]。
+          if [ "$REF_TYPE" = "tag" ]; then WANT="${REF_NAME#v}"; else WANT=$(node -p "require('./package.json').version"); fi
+          NOTES="$RUNNER_TEMP/release-notes.md"
+          {
+            if [ -f CHANGELOG.md ]; then
+              awk -v want="$WANT" '/^## /{ p = (index($0, "[" want "]") > 0); next } p{ print }' CHANGELOG.md > "$NOTES.part" || true
+            else
+              : > "$NOTES.part"
+            fi
+            if [ -s "$NOTES.part" ]; then
+              cat "$NOTES.part"
+            else
+              echo "CHANGELOG.md 里没有 $WANT 这一段（滚动调试版常见），下面这些信息为准。"
+            fi
+            echo
+            echo "---"
+            echo
+            echo "构建自 \`$REF_NAME@${SHORT}\`，APK ${SIZE}。"
+            echo
+            echo "装法：手机直接安装；覆盖旧版本不会丢数据（词库、学习进度、错题本都在应用本地存储里，debug 签名一致）。"
+            echo
+            echo "⚠️ debug 签名仅供自用，不要拿去上架。"
+            echo
+            echo "本次构建日志：${RUN_URL}"
+          } > "$NOTES"
+          echo "发布说明取自 CHANGELOG（$WANT），共 $(wc -l < "$NOTES") 行"
 
-          ⚠️ debug 签名仅供自用，不要拿去上架。
-
-          本次构建日志：${RUN_URL}"
           if [ "$REF_TYPE" = "tag" ]; then
             TAG="$REF_NAME"
             if gh release view "$TAG" >/dev/null 2>&1; then
               echo "Release $TAG 已存在，覆盖其 APK 资产"
-              gh release edit "$TAG" --title "noadic $TAG" --notes "$NOTES"
+              gh release edit "$TAG" --title "noadic $TAG" --notes-file "$NOTES"
               gh release upload "$TAG" "$APK" --clobber
             else
-              gh release create "$TAG" "$APK" --title "noadic $TAG" --notes "$NOTES"
+              gh release create "$TAG" "$APK" --title "noadic $TAG" --notes-file "$NOTES"
             fi
           else
             TAG=latest-debug
             if gh release view "$TAG" >/dev/null 2>&1; then
-              gh release edit "$TAG" --title "最新调试版 APK（每次 push 自动更新）" --notes "$NOTES"
+              gh release edit "$TAG" --title "最新调试版 APK（每次 push 自动更新）" --notes-file "$NOTES"
               gh release upload "$TAG" "$APK" --clobber
               # 滚动 tag 会停在第一次的提交上，导致 Release 的 Source code 指向旧代码：把 tag 挪到 HEAD
               gh api --method PATCH "repos/${{ github.repository }}/git/refs/tags/$TAG" \
@@ -119,7 +141,7 @@ jobs:
             else
               gh release create "$TAG" "$APK" \
                 --title "最新调试版 APK（每次 push 自动更新）" \
-                --prerelease --notes "$NOTES"
+                --prerelease --notes-file "$NOTES"
             fi
           fi
           echo "✅ 已发布： ${{ github.server_url }}/${{ github.repository }}/releases/tag/$TAG"

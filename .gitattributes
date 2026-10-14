@@ -17,5 +17,8 @@
 *.md  text eol=lf
 *.py  text eol=lf
 *.mjs text eol=lf
+# shell 脚本必须是 LF：带 CRLF 的 shebang 会让 bash 报 "bad interpreter"，
+# 而 CI 里的 bash -n / awk 抽取都靠这些脚本
+*.sh  text eol=lf
 
 # PowerShell 脚本：BOM 才是关键（含中文时缺 BOM 会被 PS 5.1 按 GBK 误读），换行不做转换
