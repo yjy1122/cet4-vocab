@@ -247,11 +247,23 @@ const UI = (() => {
     return list;                                       // 默认＝书序（词库插入顺序）
   }
 
+  /** 撤销按钮的可用态必须跟着快照走。它原先只在打开设置抽屉时刷新一次，
+   *  于是"删完一整单元→按钮仍是灰的→点不动"（真机实测）。渲染词库时同步即可，
+   *  因为所有会产生快照的动作（入库、删词、删课、删单元）都会重渲染词库。 */
+  function syncUndoBtn() {
+    const b = $("#btn-undo-import");
+    if (!b) return;
+    const can = Store.canUndo();
+    b.disabled = !can;
+    b.title = can ? "回滚最近一次入库或批量删除" : "暂无可撤销的操作（只保留最近一次入库或批量删除）";
+  }
+
   function renderLibrary() {
     const kw = ($("#lib-search").value || "").trim().toLowerCase();
     const unit = $("#lib-unit").value;
     const st = $("#lib-status").value;
     libFilter = { kw, unit, st };
+    syncUndoBtn();
     let list = Store.words.slice();
     if (unit) list = list.filter((w) => Store.unitKey(w) === unit);
     if (st === "unenriched") list = list.filter((w) => !w.enriched);
