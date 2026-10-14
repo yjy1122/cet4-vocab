@@ -74,6 +74,35 @@ else { & $g -C $root remote add origin $url; Write-Host "已添加 remote origin
 
 if ($SkipPush) { Write-Host "已跳过推送"; exit 0 }
 
+# ---------- 3.5 推送前权限预检（--dry-run 会走完鉴权，但不改远端） ----------
+# 血泪教训：Fine-grained token 即使能 ls-remote，也可能没有 Contents 写权限；
+# 公开仓库的"读得到"完全不能证明 token 有权。dry-run 是唯一无副作用的判定。
+Write-Host "预检：push --dry-run（只鉴权，不写入）…" -ForegroundColor Cyan
+$dry = (& $g -C $root push --dry-run --porcelain origin $Branch 2>&1 | Out-String)
+if ($dry -match '(?i)denied|403') {
+  Write-Host "❌ 鉴权通过但没有写权限 —— token 的 Contents 范围不够，与网络无关。" -ForegroundColor Red
+  Write-Host "   去 GitHub 改 token（不用重建仓库）：" -ForegroundColor Yellow
+  Write-Host "   Settings → Developer settings → Fine-grained tokens → 这个 token → Edit"
+  Write-Host "     1) Repository access 选 'Only select repositories'，把 $Repo 加进去"
+  Write-Host "        （或者直接改成 'All repositories'，最省事）"
+  Write-Host "     2) Repository permissions → Contents → 选 'Read and write'"
+  Write-Host "     3) 保存后重新跑本脚本（token 会被新值覆盖）"
+  Write-Host "   嫌 Fine-grained 麻烦就用经典 token：Personal access tokens → Tokens (classic)，勾 repo 范围即可。" -ForegroundColor Yellow
+  exit 2
+}
+if ($dry -match '(?i)404|not found|Repository not found') {
+  Write-Host "❌ 远端找不到仓库 $Repo：确认名字拼对、确实已创建，且 token 被授权访问它。" -ForegroundColor Red
+  exit 2
+}
+if ($LASTEXITCODE -ne 0) {
+  Write-Host "⚠ 预检未通过（不一定是权限问题），完整输出：" -ForegroundColor Yellow
+  Write-Host $dry
+  $ans = Read-Host "仍要继续真实推送？(y/N)"
+  if ($ans -ne "y") { exit 2 }
+} else {
+  Write-Host "✅ 预检通过，远端可写" -ForegroundColor Green
+}
+
 Write-Host "推送 $Branch …" -ForegroundColor Cyan
 & $g -C $root push -u origin $Branch 2>&1 | ForEach-Object { "  $_" }
 if ($LASTEXITCODE -eq 0) {
