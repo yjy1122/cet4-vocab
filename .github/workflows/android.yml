@@ -50,6 +50,19 @@ jobs:
         continue-on-error: true
         run: npx --yes @capacitor/assets@3 generate --android
 
+      - name: 把 package.json 的版本写进 Android versionName
+        # Capacitor 的 android 模板把 versionName 硬编码成 "1.0"，cap add/sync 都
+        # 不会用 package.json 覆盖它（实测：package.json 已是 1.1.0，aapt dump 出来
+        # 仍写着 versionName='1.0'）。不盖一下，手机上"关于"里的版本永远对不上标签。
+        run: |
+          set -euo pipefail
+          V=$(node -p "require('./package.json').version")
+          test -f android/app/build.gradle || { echo "::error::找不到 android/app/build.gradle"; exit 1; }
+          grep -q 'versionName ' android/app/build.gradle || { echo "::error::build.gradle 里没有 versionName，模板变了"; exit 1; }
+          sed -i "s/versionName \".*\"/versionName \"$V\"/" android/app/build.gradle
+          echo "package.json 版本 $V -> build.gradle:"
+          grep -E 'versionCode |versionName ' android/app/build.gradle | sed 's/^/   /'
+
       - name: 编译 APK
         run: |
           cd android
