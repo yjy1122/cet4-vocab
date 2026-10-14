@@ -1,0 +1,23 @@
+{
+  "name": "cet4-vocab-engine",
+  "version": "1.0.0",
+  "private": true,
+  "description": "CET-4 词汇引擎：录入去重 / 按单元顺序学习 / 四题型考核 / 错题闭环（纯本地离线，Capacitor 封装为 Android APK）",
+  "main": "index.js",
+  "scripts": {
+    "sync": "cap sync android",
+    "run:android": "cap run android",
+    "open:android": "cap open android",
+    "icons": "python _tools/android-res.py",
+    "build:apk": "cd android && gradlew.bat assembleDebug",
+    "build:apk:release": "cd android && gradlew.bat assembleRelease"
+  },
+  "devDependencies": {
+    "@capacitor/android": "^6.1.2",
+    "@capacitor/cli": "^6.2.0",
+    "@capacitor/core": "^6.1.2"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

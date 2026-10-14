@@ -1,0 +1,14 @@
+{
+  "appId": "com.cet4.vocabengine",
+  "appName": "CET-4 词汇",
+  "webDir": "www",
+  "android": {
+    "allowMixedContent": false,
+    "backgroundColor": "#ffffff",
+    "appendUserAgent": "cet4-app",
+    "webContentsDebuggingEnabled": false
+  },
+  "server": {
+    "androidScheme": "https"
+  }
+}

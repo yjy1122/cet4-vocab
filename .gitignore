@@ -1,0 +1,21 @@
+node_modules/
+android/
+ios/
+www/sw-cache/
+*.log
+.DS_Store
+.gradle/
+local.properties
+android/app/build/
+android/build/
+android/.gradle/
+android/captures/
+android/app/release/*.apk
+*.iml
+.idea/
+
+# 便携工具链与产物（体积大，全部可重新生成，不要提交）
+.tooling/
+dist/
+.npm-cache/
+.tmp/

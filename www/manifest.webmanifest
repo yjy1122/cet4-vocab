@@ -1,0 +1,25 @@
+{
+  "name": "CET-4 词汇引擎",
+  "short_name": "CET-4 词汇",
+  "description": "大学英语四级词汇强化：批量录入与去重、按单元顺序学习、四题型轮换考核、错题加权复现、写作与阅读联动。纯本地离线。",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["standalone", "fullscreen", "minimal-ui"],
+  "orientation": "portrait",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
+  "lang": "zh-CN",
+  "categories": ["education", "reference"],
+  "icons": [
+    { "src": "./favicon-32.png", "sizes": "32x32", "type": "image/png" },
+    { "src": "./icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "./icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "./icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "./icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "继续学习", "short_name": "继续", "url": "./index.html", "icons": [{ "src": "./icon-192.png", "sizes": "192x192" }] },
+    { "name": "录入生词", "short_name": "录入", "url": "./index.html", "icons": [{ "src": "./icon-192.png", "sizes": "192x192" }] }
+  ]
+}

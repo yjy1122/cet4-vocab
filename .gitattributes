@@ -1,0 +1,21 @@
+# 二进制资源不要做换行/文本处理（否则 PNG/APK 会被破坏）
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.zip binary
+*.apk binary
+*.brar binary
+*.7z binary
+
+# 源码统一按 LF 存库，检出时不转换（工程里 core.autocrlf=false）
+*.js  text eol=lf
+*.css text eol=lf
+*.html text eol=lf
+*.json text eol=lf
+*.md  text eol=lf
+*.py  text eol=lf
+*.mjs text eol=lf
+
+# PowerShell 脚本：BOM 才是关键（含中文时缺 BOM 会被 PS 5.1 按 GBK 误读），换行不做转换

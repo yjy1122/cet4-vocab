@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#0b1220"/>
+  <rect x="40" y="40" width="432" height="432" rx="72" fill="#131c2e" stroke="#2a3854" stroke-width="8"/>
+  <text x="256" y="212" font-family="monospace" font-size="96" font-weight="700" fill="#60a5fa" text-anchor="middle">CET-4</text>
+  <text x="256" y="330" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="88" font-weight="700" fill="#e8eefb" text-anchor="middle">词汇</text>
+  <circle cx="256" cy="404" r="16" fill="#34d399"/>
+</svg>

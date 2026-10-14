@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#ffffff">
+<meta name="color-scheme" content="light">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="CET-4 词汇">
+<meta name="format-detection" content="telephone=no">
+<title>CET-4 词汇引擎 · 录入 / 考核 / 错题闭环</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon.svg">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark">CET-4</span>
+    <div class="brand-txt">
+      <strong>词汇引擎</strong>
+      <small id="lib-summary">词库加载中…</small>
+    </div>
+  </div>
+  <div class="pills" id="top-progress" title="已掌握 / 错题本 / 待测">
+    <span class="pill ok"><i>●</i><b id="p-mastered">0</b> 已掌握</span>
+    <span class="pill bad"><i>●</i><b id="p-wrong">0</b> 错题</span>
+    <span class="pill todo"><i>●</i><b id="p-new">0</b> 待测</span>
+  </div>
+  <button class="icon-btn" id="btn-settings" aria-label="设置">⚙</button>
+</header>
+
+<nav class="tabbar" id="tabs" aria-label="主导航">
+  <button class="tab active" data-view="quiz">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L20 8l-4-4L4 16z"/><path d="M14 6l4 4"/></svg>
+    <span>测验</span>
+  </button>
+  <button class="tab" data-view="library">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v18H6.5A2.5 2.5 0 0 1 4 18.5z"/><path d="M8 3v18"/></svg>
+    <span>词库</span>
+  </button>
+  <button class="tab" data-view="ingest">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11"/><path d="M7 10l5 5 5-5"/><path d="M4 20h16"/></svg>
+    <span>录入</span>
+  </button>
+  <button class="tab" data-view="wrongbook">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3.5"/></svg>
+    <span>错题本</span>
+  </button>
+  <button class="tab" data-view="advanced">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l2.2 5.3L19.5 10l-5.3 2.2L12 17.5 9.8 12.2 4.5 10z"/></svg>
+    <span>进阶</span>
+  </button>
+</nav>
+
+<main id="main">
+
+  <!-- ============ Mode 2 测验 ============ -->
+  <section class="view active" id="view-quiz">
+    <button class="qbar" id="btn-qbar" aria-expanded="false" title="展开出题设置">
+      <span class="qb-main"><b id="strip-label">—</b><small id="strip-meta"></small></span>
+      <span class="qb-bar"><i id="strip-fill"></i></span>
+      <span class="qb-cfg">调整<b>⌄</b></span>
+    </button>
+
+    <div class="sheet hidden" id="quiz-sheet">
+      <div class="sheet-grip"></div>
+      <div class="modebar">
+        <div class="seg" id="mode-seg"></div>
+        <button class="primary" id="btn-continue">▶ 继续学习</button>
+        <div class="mini muted" id="mode-hint"></div>
+      </div>
+      <div class="planbar">
+        <div class="seg seg-scroll" id="plan-seg"></div>
+        <div class="mini muted" id="plan-hint"></div>
+      </div>
+      <div class="seqbar" id="seq-bar"></div>
+      <div class="quiz-toolbar">
+        <div class="seg" id="scope-seg"></div>
+        <div class="qcount">
+          本轮 <b id="q-asked">0</b> 题 · 正确率 <b id="q-acc">—</b>
+          <div class="qcount" id="q-bookmark" title="书上进度"></div>
+        </div>
+        <button class="ghost" id="btn-reset-session">重开一轮</button>
+      </div>
+    </div>
+
+    <div id="quiz-stage"></div>
+    <div class="swipe-hint mini muted" id="swipe-hint">← 左滑 / 右滑 下一题 →</div>
+
+    <div class="feedback hidden" id="feedback">
+      <div class="fb-row"><span class="fb-key">【判定】</span><span class="fb-val" id="fb-verdict"></span></div>
+      <div class="fb-row"><span class="fb-key">【正确答案与考点】</span><span class="fb-val" id="fb-answer"></span></div>
+      <div class="fb-row"><span class="fb-key">【解析与避坑】</span><span class="fb-val" id="fb-why"></span></div>
+      <div class="fb-row"><span class="fb-key">【真题/语境例句】</span><span class="fb-val" id="fb-example"></span></div>
+      <div class="fb-row"><span class="fb-key">【当前进度】</span><span class="fb-val" id="fb-progress"></span></div>
+      <div class="fb-next">
+        <button class="primary" id="btn-next">下一题 ▶</button>
+        <label class="mini"><input type="checkbox" id="chk-autonext" checked> 自动连答</label>
+        <span class="mini muted" id="auto-tip"></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 词库 ============ -->
+  <section class="view" id="view-library">
+    <div class="lib-tools">
+      <input id="lib-search" type="search" placeholder="搜索单词 / 中文释义…">
+      <select id="lib-unit"></select>
+      <select id="lib-status">
+        <option value="">全部状态</option>
+        <option value="new">待测</option>
+        <option value="learning">学习中</option>
+        <option value="wrong">错题</option>
+        <option value="mastered">已掌握</option>
+        <option value="unenriched">缺音标/例句</option>
+      </select>
+      <button class="ghost" id="btn-lib-sort">排序：默认</button>
+      <button class="ghost" id="btn-lib-group">▦ 按单元分组</button>
+      <button class="ghost" id="btn-undo-import" title="回滚最近一次确认入库">撤销上次入库</button>
+    </div>
+    <div id="lib-list" class="list"></div>
+  </section>
+
+  <!-- ============ Mode 1 录入 ============ -->
+  <section class="view" data-mode="ingest" id="view-ingest">
+    <div class="grid2">
+      <div class="panel">
+        <h3>① 批量导入（离线通道）</h3>
+        <p class="muted small">支持三种贴法，与 <code>样例.docx</code> 同构：<br>
+          <code>Unit 2</code> 分行 → <code>英文单词 ⇥ 词性及中文释义</code>（Tab 分隔）；<br>
+          或每行 <code>word, 词性 释义</code>；也可一行一个单词（音标/例句自动补全）。</p>
+        <textarea id="ingest-text" rows="10" placeholder="realm&#9;n. 领域，场所；王国&#10;pile&#9;n. 一堆，一叠 v. 堆起，堆积"></textarea>
+        <div class="row" id="pin-row">
+          <span class="mini muted pin-label">导入归属</span>
+          <select id="pin-unit" title="父级单元"></select>
+          <select id="pin-lesson" title="课次"></select>
+          <span class="mini muted" id="pin-tip">默认自动识别文本里的 Unit / Lesson 标题；分页提取只截到 “Lesson 3” 时，在这里钉住父级单元</span>
+        </div>
+        <div class="row">
+          <label class="file-btn">上传 .docx / .txt / .csv / .json
+            <input type="file" id="ingest-file" accept=".docx,.txt,.csv,.json" hidden>
+          </label>
+          <label class="mini"><input type="checkbox" id="ingest-autofill" checked> 用内置词典自动补音标/例句</label>
+          <select id="ingest-dedup" title="重复词条的处理策略">
+            <option value="merge">重复时：合并义项（推荐）</option>
+            <option value="skip">重复时：跳过不改</option>
+            <option value="overwrite">重复时：新释义覆盖</option>
+          </select>
+          <button class="primary" id="btn-parse">解析</button>
+        </div>
+        <p class="muted small" id="ingest-dedup-note">重复判定按<strong>词元 + 别名</strong>（assumes→assume，despatch=dispatch）；释义完全一致记为「重复忽略」，不一致则合并义项。<strong>重导入不会重置错题与已掌握状态。</strong></p>
+      </div>
+
+      <div class="panel">
+        <h3>② AI 补全（Mode 1 引擎）</h3>
+        <p class="muted small">严格输出 <code>has_words / reply_message / words[]</code> 契约。两种通道：</p>
+        <div class="row">
+          <button class="ghost" id="btn-ai-direct">直连 API 补全</button>
+          <button class="ghost" id="btn-ai-bridge">生成 Prompt（复制粘贴桥）</button>
+          <label class="file-btn">📷 拍照/选图录入<input type="file" id="ingest-image" accept="image/*" hidden></label>
+        </div>
+        <p class="muted small">浏览器直连第三方 API 常被 CORS 拦；复制粘贴桥对任意大模型都可用。设置里可填端点。图片录入需支持视觉的模型。</p>
+        <button class="ghost" id="btn-intent-open">从一句话里抓词</button>
+        <div id="ai-zone"></div>
+      </div>
+    </div>
+
+    <div class="panel" id="preview-panel" hidden>
+      <div class="row spread">
+        <h3>待确认入库 <span class="badge" id="pv-count">0</span></h3>
+        <div class="row">
+          <button class="ghost" id="btn-pv-discard">丢弃</button>
+          <button class="primary" id="btn-pv-commit">确认入库</button>
+        </div>
+      </div>
+      <div class="dedup-bar" id="pv-summary"></div>
+      <div class="table-wrap" id="pv-table"></div>
+    </div>
+  </section>
+
+  <!-- ============ 错题本 ============ -->
+  <section class="view" id="view-wrongbook">
+    <div class="panel">
+      <div class="row spread">
+        <h3>错题集 · 混淆原因与加权复现</h3>
+        <div class="row">
+          <button class="ghost" id="btn-wb-clear">清空记录</button>
+          <button class="primary" id="btn-wb-drill">专练错题</button>
+        </div>
+      </div>
+      <p class="muted small">规则：答错即入本并记混淆原因 → 后续提高出现频率且<strong>必须换题型</strong>再考 → 在 <strong>2 次不同题型</strong>均答对才移入「已掌握」。</p>
+      <div id="wb-list" class="list"></div>
+    </div>
+  </section>
+
+  <!-- ============ Mode 3 进阶 ============ -->
+  <section class="view" id="view-advanced">
+    <div class="grid2">
+      <div class="panel">
+        <h3>写作联动 · 错词造段</h3>
+        <p class="muted small">从错题集抽 3 词，写 1–2 句微段落；提交后给四级高分替换建议。</p>
+        <div id="wr-task"></div>
+        <textarea id="wr-input" rows="6" placeholder="用上面 3 个词写一小段…"></textarea>
+        <div class="row"><button class="primary" id="btn-wr-check">批改并给替换建议</button></div>
+        <div id="wr-result"></div>
+      </div>
+      <div class="panel">
+        <h3>阅读联动 · 生词定制短文</h3>
+        <p class="muted small">按近期难词库生成 150–200 词四级风格短文 + 长难句拆解。</p>
+        <div class="row">
+          <label class="mini"><input type="checkbox" id="rd-usewrong" checked> 优先用错题词</label>
+          <button class="primary" id="btn-rd-gen">生成短文</button>
+        </div>
+        <div id="rd-result"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 设置抽屉 ============ -->
+  <div class="drawer-mask hidden" id="drawer-mask"></div>
+  <aside class="drawer hidden" id="drawer">
+    <div class="row spread"><h3>设置</h3><button class="icon-btn" id="btn-close-drawer">✕</button></div>
+
+    <h4>出题</h4>
+    <div class="field"><label>每题目标：轮换题型</label>
+      <div class="checks" id="type-checks"></div>
+    </div>
+    <div class="field"><label for="set-daily">每轮题量上限 <b id="daily-val">20</b></label>
+      <input type="range" id="set-daily" min="5" max="60" step="5"></div>
+    <div class="field"><label for="set-review">复习占比 <b id="review-val">70%</b>（其余配额按书序引入新词）</label>
+      <input type="range" id="set-review" min="30" max="90" step="5"></div>
+    <div class="field"><label class="mini"><input type="checkbox" id="set-order" checked> 新词严格按书的排列顺序推进（拍照录入的书序）</label></div>
+    <div class="field"><label for="set-pass">顺序闯关通关线：已掌握 <b id="pass-val">80%</b> 且本单元错题清零</label>
+      <input type="range" id="set-pass" min="50" max="100" step="5"></div>
+    <div class="field"><label class="mini"><input type="checkbox" id="set-autoadv" checked> 达标后自动进入下一单元（关闭则先弹通关卡）</label></div>
+    <div class="field"><label class="mini"><input type="checkbox" id="set-carry" checked> 已通关单元的回潮错题仍插队复习（推荐）</label></div>
+    <div class="field"><label for="set-dedup">重复词条默认策略</label>
+      <select id="set-dedup">
+        <option value="merge">合并义项（不重置进度）</option>
+        <option value="skip">跳过不改</option>
+        <option value="overwrite">以新释义覆盖</option>
+      </select></div>
+    <div class="field"><label class="mini"><input type="checkbox" id="set-usepool"> 允许扩展易混词池出题（仅出题，不入库）</label></div>
+    <div class="field"><label class="mini"><input type="checkbox" id="set-sound" checked> 启用发音朗读（Web Speech）</label></div>    <div class="field"><label class="mini"><input type="checkbox" id="set-swipe" checked> 左滑 / 右滑 切换下一题（未作答时算跳过）</label></div>
+
+    <h4>AI 端点（可选）</h4>
+    <div class="field"><label for="set-ai-base">Base URL</label>
+      <input id="set-ai-base" placeholder="https://api.openai.com/v1 或 http://localhost:11434/v1"></div>
+    <div class="field"><label for="set-ai-model">Model</label>
+      <input id="set-ai-model" placeholder="gpt-4o-mini / deepseek-chat"></div>
+    <div class="field"><label for="set-ai-key">API Key（仅存本机）</label>
+      <input id="set-ai-key" type="password" placeholder="sk-…"></div>    <div class="row probe-row">
+      <button class="ghost" id="btn-ai-probe">🔌 测试连接</button>
+      <span class="mini muted" id="ai-probe-out">未测试</span>
+    </div>
+
+    <h4>数据（纯本地，无服务器）</h4>
+    <div class="row">
+      <button class="ghost" id="btn-export">导出 JSON</button>
+      <label class="file-btn">导入 JSON<input type="file" id="btn-import" accept=".json" hidden></label>
+      <button class="ghost danger" id="btn-wipe">清空全部</button>
+    </div>
+    <p class="muted small" id="storage-info"></p>
+  </aside>
+</main>
+
+<div class="modal hidden" id="modal">
+  <div class="modal-box">
+    <div class="row spread"><h3 id="modal-title">编辑词条</h3><button class="icon-btn" id="modal-close">✕</button></div>
+    <div id="modal-body"></div>
+    <div class="row end"><button class="ghost" id="modal-cancel">取消</button><button class="primary" id="modal-save">保存</button></div>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<!-- 数据在前；dict-extra 的索引依赖 Lex，故 lexicon 必须先于 dict-extra 加载 -->
+<script src="js/seed-words.js"></script>
+<script src="js/lexicon.js"></script>
+<script src="js/dict-extra.js"></script>
+<script src="js/store.js"></script>
+<script src="js/parse.js"></script>
+<script src="js/distractors.js"></script>
+<script src="js/quiz.js"></script>
+<script src="js/ai.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

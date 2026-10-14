@@ -1,0 +1,58 @@
+name: 构建 Android APK
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  apk:
+    name: Debug APK（云构建，本机无需 Android SDK）
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: 安装 JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: 安装 Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platforms;android-34 build-tools;34.0.0 platform-tools'
+
+      - name: 安装依赖
+        run: npm install
+
+      - name: 生成 Android 工程
+        run: npx --yes cap add android
+
+      - name: 同步 web 资源到 android/
+        run: npx --yes cap sync android
+
+      - name: 用 assets/icon.png 生成图标与开屏图
+        run: npx --yes capacitor-assets generate --android --iconPath assets/icon.png --splashPath assets/splash.png
+
+      - name: 编译 APK
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: 上传 APK 产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: cet4-vocab-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
