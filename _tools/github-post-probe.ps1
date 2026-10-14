@@ -1,4 +1,4 @@
-<#
+﻿<#
   Probe whether the local proxy carries POST/upload to github.com.
   Isolates "git bug" from "proxy policy" when `git push` hangs after a
   successful dry-run (dry-run only ever does the GET refs advertisement).

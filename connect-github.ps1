@@ -43,9 +43,36 @@ if (Test-Path -LiteralPath $ca) {
 }
 
 # ---------- 3. 凭据 ----------
-$credFile = ($root -replace '\\', '/') + "/.tooling/git-credentials"
-& $g -C $root config --local credential.helper "store --file=$credFile"
-& $g -C $root config --local "credential.https://github.com.helper" ""
+# store 文件路径也别含中文（git 通过 sh 调用 helper，中文路径会被毁码），
+# 能用 ASCII 联接路径就用它。
+$credWin = Join-Path $root ".tooling\git-credentials"
+$junction = "D:\cet4-build"
+if (Test-Path -LiteralPath $junction) {
+  $credForGit = ($junction -replace '\\', '/') + "/.tooling/git-credentials"
+} else {
+  $credForGit = ($credWin -replace '\\', '/')
+}
+# credential.helper 是**多值继承键**，git 按 系统 → 全局 → 本仓库 的顺序收集所有值，
+# 第一个能应答的 helper 就用掉。便携版 git 的系统 gitconfig 里写着
+#   [credential] helper = helper-selector
+# 它会启动一个 GUI 选择器等你点按钮 —— push 因此看起来"卡死"（实盘抓到过一个
+# git-credential-helper-selector 进程在等输入）。--replace-all 只清本层，清不掉它。
+# 唯一办法：在本层先写一条**空值**（git 语义=丢弃此前所有 helper），再挂 store。
+# 空值不能直接当参数传（PowerShell 5.1 会把空串整个丢掉，git 报 wrong number of arguments），
+# 传两字符的 '""' 让 git 的写入器落成 helper = （已实测：--get-all 读回的是空串）。
+& $g -C $root config --local --unset-all credential.helper | Out-Null
+& $g -C $root config --local --add credential.helper '""'
+& $g -C $root config --local --add credential.helper "store --file=$credForGit"
+& $g -C $root config --local credential.interactive false
+& $g -C $root config --local credential.helperselector.selected store
+# 自检：确认空值确实在 store 之前，且不会再有 helper-selector 混进来。
+$helpers = @(& $g -C $root config --local --get-all credential.helper)
+if ($helpers.Count -lt 2 -or "$($helpers[0])" -ne "" ) {
+  Write-Host "❌ credential.helper 列表不对：$(($helpers | ForEach-Object { "'$_'" }) -join ' , ')" -ForegroundColor Red
+  Write-Host "   需要第一条为空值（截断系统级 helper-selector），第二条是 store --file=…" -ForegroundColor Yellow
+  exit 1
+}
+Write-Host "✅ credential.helper = [空值截断, store]（系统级弹窗选择器已失效）" -ForegroundColor Green
 
 if (-not $Repo -or $Repo -notmatch '^[\w\.-]+/[\w\.-]+$') {
   Write-Host "用法：.\connect-github.ps1 -Repo 用户名/仓库名" -ForegroundColor Yellow
@@ -54,17 +81,20 @@ if (-not $Repo -or $Repo -notmatch '^[\w\.-]+/[\w\.-]+$') {
 $user = $Repo.Split("/")[0]
 $token = $env:GH_TOKEN
 if (-not $token) {
-  Write-Host "粘贴 GitHub token（Fine-grained 只需 Contents:Read+Write；经典 token 勾 repo 范围）。输入不回显。" -ForegroundColor Cyan
+  Write-Host "粘贴 GitHub token（Fine-grained 要 Contents + Workflows 都 Read and write；经典 token 勾 repo + workflow）。输入不回显。" -ForegroundColor Cyan
   $secure = Read-Host "token" -AsSecureString
   $token = [System.Net.NetworkCredential]::new("", $secure).Password
 }
 if (-not $token) { Write-Host "❌ 没有 token" -ForegroundColor Red; exit 1 }
 
 Write-Host "保存凭据到 .tooling\git-credentials（不入库）…" -ForegroundColor Cyan
-$inp = "https://$user`:$token@github.com`n"
-$inp | & $g -C $root credential approve
-Start-Sleep -Milliseconds 300
-if (Test-Path -LiteralPath ($credFile -replace '/', '\')) { Write-Host "✅ 已保存" -ForegroundColor Green } else { Write-Host "⚠ 凭据文件未生成，推送时会再问一次" -ForegroundColor Yellow }
+# 不要 `$line | git credential approve`：PowerShell 往原生程序 stdin 写行时会带 \r，
+# git 会报 "invalid credential line" 并静默失败，脚本却照样显示"已保存"。
+# store 文件格式就是一行 URL，直接按 LF 写文件，字节可控。
+New-Item -ItemType Directory -Force -Path (Split-Path -LiteralPath $credWin) | Out-Null
+[System.IO.File]::WriteAllText($credWin, "https://$user`:$token@github.com`n", (New-Object System.Text.UTF8Encoding($false)))
+if ((Get-Content -LiteralPath $credWin -Raw) -match "@github\.com") { Write-Host "✅ 已保存" -ForegroundColor Green }
+else { Write-Host "❌ 凭据文件写入失败：$credWin" -ForegroundColor Red; exit 1 }
 
 # ---------- 4. remote + push ----------
 $url = "https://github.com/$Repo.git"
