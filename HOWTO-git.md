@@ -120,15 +120,34 @@ curl -X PUT .../contents/_probe.tmp      # 可撤销的写探测
 
 ---
 
-## 4. 改仓库名之后
+## 4. 改仓库名 + 填仓库信息（这三件事都要 Administration）
 
-GitHub 对改名前的地址做重定向，`origin` 不改也能推。但 Actions/Release 链接会变，建议同步：
+实测：Contents + Workflows 的 fine-grained token 对下面三个操作**全部 403**，
+只能在本机改不了、得去网页上点（或给 token 补 `Administration: Read and write`）：
+
+| 操作 | 端点 | 需要的权限 |
+|---|---|---|
+| 改仓库名 | `PATCH /repos/{o}/{r}` `{"name":"noadic"}` | Administration: write（实测 403） |
+| 填简介 | 同上 `{"description":"…"}` | Administration: write |
+| 打 topics | `PUT /repos/{o}/{r}/topics` | 实测同样 403（别指望它是 Contents 范围） |
+
+**改名**：仓库 → Settings → General → Repository name → `noadic` → Rename。
+改完同步本地：
 
 ```powershell
 .\git.ps1 remote set-url origin https://github.com/你的用户名/noadic.git
 ```
 
-`README.md` 里的徽标与下载直链也按新名字写好了；若最终没改名，把 URL 里的 `noadic` 换回旧名即可。
+**About（网页右上 ⚙）直接粘这些**：
+
+- Description（中英各一，二选一或都用）：
+  - `纯本地离线的四级词汇引擎：录入去重 · 按单元顺序学 · 遮罩背诵 · 五题型考核 · 错题闭环 · 写作阅读联动。零构建零服务器，Capacitor 封 APK。`
+  - `Local-first CET-4 vocabulary engine: dedup ingestion, unit-sequenced drills, masked recitation, 5 question types, wrong-answer loop. No build step, no server, ships as an APK.`
+- Topics：`english` `vocabulary` `cet-4` `spaced-repetition` `offline-first` `pwa` `capacitor` `android` `localStorage` `flashcards` `language-learning` `no-build`
+
+`README.md` 里的徽标与下载直链已按新名字写好；**没改名之前那三处会显示红标**（构建状态、版本号、`/releases` 链接），
+`_tools\check-readme-links.ps1` 会把它们精确报成 3 项失败 —— 改完名再跑一次应当归零。
+若最终决定不改名，就把 URL 里的 `noadic` 换回旧名即可。
 
 ---
 
@@ -141,18 +160,31 @@ GitHub 对改名前的地址做重定向，`origin` 不改也能推。但 Action
 
 CI 会自动出正式 Release；日常 push 则覆盖 `latest-debug` 这个滚动预发布版。撤回一个版本：`.\git.ps1 tag -d v1.2` + 网页删对应 Release（或 API 删 `git/refs/tags/v1.2`）。
 
+> **发版前先在 `CHANGELOG.md` 里写好这一段**：Release 正文是从 `CHANGELOG.md` 抽 `## [<版本>]` 到下一个 `## ` 之间的内容，
+> 抽不到就只会剩下构建来源那几行。版本号取自 `package.json`（标签 `v1.2.0` ↔ `## [1.2.0]`）。
+> 本地先验：`bash _tools/notes-extract.sh`（含"不存在的版本必须抽不到"的负向对照）。
+> 别忘了 `node _tools/bump-lock-version.mjs 1.2.0` —— 锁文件只能动根版本那两处。
+
 ---
 
 ## 6. 提交前自检（本机跑，不用等 CI）
 
 ```powershell
-node _tools/test-logic.mjs                                   # 221 项逻辑测试
+node _tools/test-logic.mjs                                   # 242 项逻辑测试
 node _tools/audit-wiring.mjs                                 # JS 语法 + #id 选择器对账
-node _tools/xref.mjs                                         # 跨模块引用对账（503 处）
-powershell -ExecutionPolicy Bypass -File _tools\check-workflow.ps1          # workflow YAML + 每个 run 块 bash -n
-powershell -ExecutionPolicy Bypass -File _tools\check-workflow.ps1 -SelfTest # 破坏性自测：验证上一条真有牙
+node _tools/xref.mjs                                         # 跨模块引用对账（536 处）
+bash _tools/notes-extract.sh                                 # 发布说明抽取（正/负两组）
+powershell -ExecutionPolicy Bypass -File _tools\check-workflow.ps1 -SelfTest
+                                                             # workflow 结构 + 每个 run 块 bash -n + 6 种破坏必须全被抓
+powershell -ExecutionPolicy Bypass -File _tools\check-readme-links.ps1
+                                                             # README 链接；徽标读的是 shields 渲染出的 aria-label，不是 HTTP 200
+node _tools/device-smoke.mjs --shots                         # 有模拟器/真机时：21 条真实点击断言
+node _tools/device-smoke.mjs --selftest                      # 负向对照：假断言必须被判失败
+python _tools\apk-peek.py dist\noadic-debug.apk www          # 包内资源与 www/ 逐文件 SHA 对账
 ```
 
+> 改过任何 `.ps1` 之后先跑 `powershell -ExecutionPolicy Bypass -File _tools\fix-ps1-encoding.ps1 -All`：
+> 编辑类工具写文件不带 BOM，Windows PowerShell 5.1 会把中文按 GBK 读成乱码并报"字符串缺少终止符"。
 含中文的 `.ps1` **必须 UTF-8 with BOM**，否则 PS 5.1 按 GBK 解析会报"字符串缺少终止符"这类乱码错。编辑脚本后跑一次：
 
 ```powershell
