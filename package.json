@@ -10,7 +10,8 @@
     "open:android": "cap open android",
     "icons": "python _tools/android-res.py",
     "build:apk": "cd android && gradlew.bat assembleDebug",
-    "build:apk:release": "cd android && gradlew.bat assembleRelease"
+    "build:apk:release": "cd android && gradlew.bat assembleRelease",
+    "sync:harmony": "powershell -ExecutionPolicy Bypass -File sync-www.ps1"
   },
   "devDependencies": {
     "@capacitor/android": "^6.1.2",

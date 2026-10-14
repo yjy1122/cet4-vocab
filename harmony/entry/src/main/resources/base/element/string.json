@@ -1,0 +1,16 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "noadic · 录入 / 考核 / 错题闭环"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "noadic · 不止词典"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "noadic"
+    }
+  ]
+}

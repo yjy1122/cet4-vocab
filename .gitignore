@@ -19,3 +19,17 @@ android/app/release/*.apk
 dist/
 .npm-cache/
 .tmp/
+
+# HarmonyOS (DevEco)
+harmony/oh_modules/
+harmony/.hvigor/
+harmony/local.properties
+harmony/.idea/
+harmony/**/build/
+harmony/.cxx
+harmony/.clangd
+harmony/.clang-format
+harmony/.clang-tidy
+harmony/**/.test
+harmony/.appanalyzer
+harmony/entry/src/main/resources/rawfile/
