@@ -226,7 +226,7 @@ Git 装在 `.tooling\git`，**没有写进系统 PATH、不需要管理员权限
 
 ### 你要做的三步
 
-1. **建空仓库**：GitHub 网页 → New repository → 名字随意（建议 `cet4-vocab`）→ **Private** → **不要**勾选 "Add a README" / ".gitignore" / "license"（会让首次推送冲突）。记下 `用户名/仓库名`。
+1. **建空仓库**：GitHub 网页 → New repository → 名字随意（建议 `cet4-vocab`）→ **公开/私有都行**（本仓库只有代码和种子词表，你的学习记录、错题本全在设备 localStorage 里，不会进仓库）→ **不要**勾选 "Add a README" / ".gitignore" / "license"（会让首次推送冲突）。记下 `用户名/仓库名`。
 2. **建 token**：Settings → Developer settings → **Fine-grained tokens** → Generate new token
    - Repository access：Only select repositories → 选刚才那个仓库（或直接 All repositories）
    - Permissions → Contents：**Read and write**

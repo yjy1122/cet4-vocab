@@ -20,7 +20,8 @@
 
 不需要 JDK / Android SDK / git，只要一个 GitHub 账号。
 
-1. 在 GitHub 新建一个**私有**仓库（私有可以防止你的词库和备份被公开）。
+1. 在 GitHub 新建一个空仓库（**公开/私有都行**：仓库里只有代码和种子词表，你的学习记录与词库都在设备本地，不会被公开；勾选 "Add a README" 会让首次推送冲突，别勾）。
+   推送用的 token 需要 **Contents: Read and write** 和 **Workflows: Read and write** 两项——少后者会被 GitHub 服务端 `remote rejected`，而且 `push --dry-run` 抓不到这个错。详见 README 的"连接 GitHub"。
 2. 把本目录整体上传，**必须包含**这些：
    ```
    www/                     应用本体（含图标 PNG）
