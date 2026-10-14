@@ -129,7 +129,9 @@ label.mini, .mini { font-size: 12px; color: var(--mut); display: inline-flex; ga
 .qtype.hot { color: var(--warn); background: var(--warn-soft); }
 .qword { font-size: clamp(28px, 8vw, 44px); font-weight: 800; letter-spacing: -.02em; margin: 2px 0 6px; word-break: break-word; }
 .qword-inline { font-size: 19px; font-weight: 800; color: var(--acc); }
-.qipa { font-size: 15px; color: var(--mut); font-family: ui-monospace, monospace; }
+/* 音标一律用正文字体：Android 的 monospace（Droid Sans Mono）没有 IPA 字形，
+   /ˈrelm/ 会整串吐成方框。真机截图才看得出来，无障碍树里文字是对的。 */
+.qipa { font-size: 15px; color: var(--mut); }
 .qstem { font-size: 17px; margin: 6px 0 4px; }
 .qblank { color: var(--warn); font-weight: 800; letter-spacing: .08em; }
 .qhint { font-size: 13px; color: var(--mut); margin-top: 8px; }
@@ -206,7 +208,7 @@ label.mini, .mini { font-size: 12px; color: var(--mut); display: inline-flex; ga
 .list { display: grid; gap: 9px; }
 .litem { border: 1px solid var(--line); border-radius: 13px; padding: 12px 13px; display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: start; box-shadow: 0 1px 2px rgba(15,23,42,.04); }
 .litem .w { font-weight: 800; font-size: 16.5px; letter-spacing: -.01em; }
-.litem .ipa { font-size: 12.5px; color: var(--mut); font-family: ui-monospace, monospace; font-weight: 400; }
+.litem .ipa { font-size: 12.5px; color: var(--mut); font-weight: 400; }
 .litem .def { font-size: 13.5px; color: var(--sub); margin-top: 3px; }
 .litem .ex { font-size: 12.5px; color: var(--mut); margin-top: 4px; }
 .litem .meta { font-size: 11.5px; color: var(--dim); margin-top: 5px; }
@@ -288,7 +290,7 @@ button.primary.danger:hover { background: #b91c1c; }
 }
 .rc-cell.en { border-left: 0; color: var(--txt); }
 .rc-cell b { font-size: 15.5px; font-weight: 800; letter-spacing: -.01em; }
-.rc-ipa { display: block; font-size: 11.5px; color: var(--mut); font-family: ui-monospace, "SF Mono", Consolas, monospace; font-weight: 400; margin-top: 2px; }
+.rc-ipa { display: block; font-size: 11.5px; color: var(--mut); font-weight: 400; margin-top: 2px; }
 .rc-cell:focus-visible { outline-offset: -2px; }
 /* 遮住的格子：内容整体从可访问性树里消失（不是透明、不是模糊），所以读屏和朗读都不会剧透。
    格子本身还在原位，点一下才换回来 —— 布局不跳，背的时候手不会滑到别处。 */

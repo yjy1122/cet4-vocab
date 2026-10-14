@@ -23,7 +23,7 @@ checks = [
     ("js/store.js", "function toggleWeak", True,  "toggleWeak"),
     ("js/quiz.js", "\"weak\"", True,              "weak scope"),
     ("css/app.css", ".rc-cell.masked", True,      "mask css"),
-    ("sw.js", "noadic-v4", True,                  "sw version"),
+    ("sw.js", "noadic-v5", True,                  "sw version"),
 ]
 bad = 0
 for f, needle, want, label in checks:

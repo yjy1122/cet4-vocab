@@ -168,6 +168,17 @@ node _tools\device-smoke.mjs --selftest     # 负向对照：确认这套检查�
 
 > 顺带一条真机才暴露的产品缺陷（已修）：`撤销上次改动` 原先用 `disabled` 表达"没得撤销"，删完一整单元后快照明明躺在 localStorage 里（`run-as` 读到 `noadic.undo`，总量仅 312 KB，远未达配额），按钮却仍是禁用态——**最需要撤销的时刻点不动**。现在按钮恒可点，无事时由 toast 明确说明。
 
+### 断言看不见的东西：必须看截图
+
+无障碍树只保证**文字内容**对，不保证**渲染出来**对。实测漏掉过一个：音标 `/ˈrelm/` 在手机上整串吐成 `/□relm/`（Android 的 monospace 字体没有 IPA 字形），而 `uiautomator dump` 里那串字符一个不差 —— 21 条断言全绿，页面却是坏的。
+
+所以 `--shots` 不是装饰：跑完至少扫一眼 `.tooling\shots\` 里的图。字体缺字、颜色对比、溢出换行这类问题，只有眼睛能抓。
+
+```powershell
+node _tools\device-smoke.mjs --shots
+Get-ChildItem .tooling\shots\smoke-*.png | Select-Object Name, LastWriteTime
+```
+
 
 ## 想上正式签名包
 
