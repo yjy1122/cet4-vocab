@@ -215,6 +215,44 @@ Git 装在 `.tooling\git`，**没有写进系统 PATH、不需要管理员权限
 - 再遇到这次这种文件被静默清零的情况，恢复命令是：`.\git.ps1 checkout -- www/js/ui.js`（比快照快且精确）。
 - 想推到 GitHub/Gitee 做异地备份：需要代理在线（这台机器直连 GitHub 的 HTTPS 下载路径不通，npmmirror 可用）。没有 git 客户端也可以用仓库网页上传，`.github/workflows/android.yml` 会自动出 APK。
 
+## 连上 GitHub（已验证可通，两个坑已填）
+
+这台机器直连 `github.com:443` 是被拒的，必须走本地代理；而 git 有两个坑：
+
+1. **git 不读 Windows 系统代理**（IE/注册表里那个 `127.0.0.1:10808` 它不认），得显式配 `http.proxy`；
+2. **openssl 后端的 CA 证书包路径含中文会被毁码**（`新建文件夹` → `??½??ļ???`），报 `error adding trust anchors`。解法是把 `http.sslCAInfo` 指到 ASCII 联接路径 `D:/cet4-build/...`。
+
+两条已经写进本仓库的 `.git/config`（local，不影响其它项目），实测 `git ls-remote https://github.com/git/git` 正常返回。**前提是代理客户端在线**（脚本会先探测 `127.0.0.1:10808`）。
+
+### 你要做的三步
+
+1. **建空仓库**：GitHub 网页 → New repository → 名字随意（建议 `cet4-vocab`）→ **Private** → **不要**勾选 "Add a README" / ".gitignore" / "license"（会让首次推送冲突）。记下 `用户名/仓库名`。
+2. **建 token**：Settings → Developer settings → **Fine-grained tokens** → Generate new token
+   - Repository access：Only select repositories → 选刚才那个仓库
+   - Permissions → Contents：**Read and write**（想看构建日志再加 Actions: Read-only）
+   - 复制好 token（只显示一次）
+3. **推送**：
+
+```powershell
+cd "D:\Users\DawnFish\Desktop\新建文件夹"
+.\connect-github.ps1 -Repo 你的用户名/cet4-vocab
+```
+
+脚本会提示粘 token（**不回显**），只写进 `.tooling\git-credentials`（`.gitignore` 已排除，不会进仓库），然后加 `origin` 并推 `main`。
+
+推成功后打开 **`https://github.com/你的用户名/cet4-vocab/actions`** —— 仓库里现成的 workflow 会自动构建，几分钟后在 **Artifacts** 下载 `cet4-vocab-debug-apk`，解压得到可直接安装的 APK。以后每次 `.\git.ps1 push` 都会重新出一个。
+
+### 备选：Gitee
+
+Gitee 走同一代理**当前也通**（`git ls-remote https://gitee.com/mirrors/git.git` 实测成功），国内速度更稳，适合纯备份：
+
+```powershell
+.\git.ps1 remote add gitee https://gitee.com/你的用户名/cet4-vocab.git
+.\git.ps1 push -u gitee main
+```
+
+但 Gitee 没有 GitHub Actions，**自动出 APK 这条只在 GitHub 上成立**。
+
 ## 下一步（手机端）
 
 代码已留好 PWA 钩子：`manifest.webmanifest` + `sw.js` + 响应式底部导航。把整个目录放到任意静态空间（或家里内网），手机浏览器打开 → 添加到主屏幕，即可离线使用，无需重写一版 App。若要上架商店或需要原生相机/推送，再走 uni-app / Flutter，把 `js/*.js` 的业务层原样复用（它们不依赖 DOM）。
