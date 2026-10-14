@@ -1,298 +1,252 @@
-# noadic（not only a dictionary · 浅色 App 界面 · 纯本地离线 · 可封 APK）
+<div align="center">
 
-名字取意 **n**ot **o**nly **a** **dic**tionary：它不是一本查词字典，而是"录入 → 按书顺序学 → 考核 → 错题闭环"的一台学习引擎（中文界面里显示为「不止词典」）。
+# noadic
 
-> 旧名 `CET-4 词汇引擎` / 仓库 `cet4-vocab`。改名后的差异只在标识：包名 `com.noadic.app`、存储键 `noadic.v1`、SW 缓存 `noadic-v1`。**旧版 APK 与新版是两个不同的应用**（包名不同，不能覆盖安装，数据不互通）；要搬数据就用应用内「设置 → 导出词库」再在新版导入。改名前导出的 `.json` 备份仍然能直接导入（`app` 字段兼容 `cet4-engine`）。
+**Not only a dictionary — 不止词典。**
 
-零构建、零依赖、零服务器：双击 `www/index.html` 即可运行，所有数据存在浏览器 `localStorage`。白色主题、底部导航栏、设置以底部面板呈现，按手机 App 的形态设计；同一套代码可用 Capacitor 封成 APK（见 `BUILD-APK.md`）。
+一台跑在浏览器里、能封成 Android App 的**词汇学习引擎**：
+录入 → 按书顺序学 → 五题型考核 → 错题闭环 → 写作阅读联动。
+零构建、零依赖、零服务器，数据全在你自己设备上。
+
+[![Build](https://img.shields.io/github/actions/workflow/status/yjy1122/noadic/android.yml?branch=main&label=%E4%BA%91%E6%9E%84%E5%BB%BA)](https://github.com/yjy1122/noadic/actions/workflows/android.yml)
+[![Release](https://img.shields.io/github/v/release/yjy1122/noadic?label=%E7%89%88%E6%9C%AC)](https://github.com/yjy1122/noadic/releases/latest)
+[![Download APK](https://img.shields.io/badge/download-APK_直接安装-2ea44f)](https://github.com/yjy1122/noadic/releases/download/latest-debug/app-debug.apk)
+[![Tests](https://img.shields.io/badge/%E5%9B%9E%E5%BD%92%E6%B5%8B%E8%AF%95-221%20%E9%A1%B9-brightgreen)](_tools/test-logic.mjs)
+![Zero build](https://img.shields.io/badge/%E6%9E%84%E5%BB%BA%E6%AD%A5%E9%AA%A4-%E6%97%A0%E9%9C%80%E6%89%93%E5%8C%85%E5%99%A8-blueviolet)
+[![License MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+![PRs Welcome](https://img.shields.io/badge/PRs-welcome-informational)
+
+</div>
+
+---
+
+## ✨ 核心特性
+
+### 📷 拍照识词与智能提取
+
+把 AI 拍照提取出来的**原始文本**直接粘进来，解析器按真实教材的脏形状逐行归一：Markdown 表格、Tab 两列、`单词：释义`、`单词 — 释义`、内联音标 `realm /relm/`、中文词性 `名词，领域` → `n. 领域`、行首序号、行尾页码、被折成两行的词条、`例：…` 行内例句自动拆成中英双语例句。也支持直接拖入 `.docx`（**浏览器内解压**，不上传任何文件）。
+
+识别照片走**视觉模型**（不是本地 OCR）：配好支持视觉的 OpenAI 兼容端点后，选图即提取；没网或没 key 时自动退化为「复制粘贴桥」——本地生成契约 Prompt，贴给任意大模型，回复粘回来自动剥掉 ` ```json ` 围栏并进同一张入库预览表。
+
+### 💬 对话式生词收集
+
+`把 postpone 加进生词本`、`「undertake」这个词帮我记一下` —— 本地意图提取，**零网络**，只收中文环境里隔离出现的英文词，不会逐词吞掉整句英文，并过滤 `a/the/is/at` 等极简词（但保留其作为核心短语一部分的情况）。
+
+### 🗂 两级词库：Unit → Lesson
+
+按教材真实结构组织，不是扁平一张表。外层单元卡、内层课次卡，各自带进度条、`掌握/错题/学习中/待测/缺补全` 分色计数与动作。归属以**主单元**为准，跨册再遇到同一个词时在词条上标 `也见于 Unit 9`，**不会**重复计数，也不会因此重置进度。
+
+### 🎯 多维度刷题考核
+
+| 题型 | 考点 | 前置条件 |
+| --- | --- | --- |
+| 四选一 · 英译中 | 干扰项必须**形近 / 义近 / 同词性 / 同词根**，不出无关干扰项 | 词库+扩展池 ≥3 个相关词 |
+| 四选一 · 中译英 | 反向，同上 | 有中文释义 |
+| 语境填空 | 用例句挖空，**考词形变换**（写原形判错并提示正确形式） | 有英文例句 |
+| 熟词生义 | 有语境句走语境题，否则问「它还有哪个含义」 | 有 ≥2 个义项 |
+| 听音拼写 | 只给 IPA + 中文提示（可 🔊 朗读），接受异形拼写 | 有音标 |
+
+除「混合轮换」外，每种题型都有**专项模式**（按钮上实时显示当前词库能出该型的词数），适合单点突破。
+
+### 🔄 科学动态错题本
+
+答错 → **立即入错题本并记混淆原因**（误选项与目标词的混淆类型 / 拼写差几个字母 / 词形未变换）→ 该词的已答对题型清零 → 后续按**冷却 + 配额 + 轮转**高频复现，且**强制更换题型** → 在 **2 种不同题型**上答对才算掌握，之后以低概率回炉抽查。
+
+> 错题优先级做过防「磁吸效应」处理：早期版本错题会吃掉整轮题目、书序永远不前进，现在复习配额（默认 70%）与冷却轮转共同约束它。
+
+### 📈 四级全科拓展（Mode 3）
+
+- **写作微练习**：抽 3 个错词 → 写微段落 → **离线规则批改**（是否用上、字数、逗号拼接句、`very/many/think/more and more/because of` 的高分替换建议 + 分数）；配好端点可切 AI 精批。
+- **阅读联动**：按你的难词库**离线拼装** 150–200 词短文 + 生词表 + 最长句的长难句分层拆解。
+
+### 🧹 重复录入治理
+
+去重是这个项目的一等公民（同一本书拍照时会反复出现同一个词）：归一化别名（`despatch/dispatch`、`so-called`↔`so called`）、**英美异形作为「软别名」**只用于查重、绝不污染词条拼写（所以 `pour` 永不会被生成假词 `por`）、**不反向猜词元**而是对库内已有词生成屈折变形表来匹配新词（`assumes → assume`、`ground → grind`）。预览是 dry-run，逐行标注 `新增/合并/重复忽略`，**导入永不重置学习进度**。
+
+### 📱 离线优先，随处可用
+
+白色主题、底部导航、设置以底部面板呈现，按手机 App 的形态设计。`localStorage` 存储 + PWA/Service Worker + Capacitor 封装成 APK。**AI 是可插拔增强开关**：不配 key 时全部功能可用（内置 129 条离线词典 + 30 条易混词池），配了 key 才走网络。
+
+---
+
+## 📸 界面预览
+
+<div align="center">
+<img src="www/icon-192.png" width="96" alt="noadic 应用图标" />
+</div>
+
+> 上面是**真实图标**（由 `_tools/make-icons.py` 用 Pillow 生成）。界面截图待补 —— 本项目没有 UI 框架，截图无法从代码生成，需要真机/浏览器采集：
+>
+> ```
+> docs/screenshots/quiz.png        测验页：题卡 + 五段反馈
+> docs/screenshots/library.png     词库页：Unit → Lesson 两级分组与进度条
+> docs/screenshots/sequence.png    顺序闯关步骤条（✓ 已通关 / ▶ 进行中 / 🔒 未开始）
+> docs/screenshots/ingest.png      录入页：解析预览表与「归属」列
+> docs/screenshots/android.jpg     手机端实机（含底部导航）
+> ```
+>
+> 有截图愿意提 PR 的，直接按上面路径放进 `docs/screenshots/` 即可。
+
+---
+
+## 🛠 技术栈
+
+| 层 | 选型 | 说明 |
+| --- | --- | --- |
+| 前端 | **原生 HTML / CSS / ES2020** | 无框架、无打包器、无 `node_modules` 依赖，浏览器直开 |
+| 状态与存储 | `localStorage` + 双索引 | 别名索引 + 屈折面索引；单槽撤销快照 |
+| 语音 | Web Speech API | 🔊 朗读，`file://` 下受限 |
+| 文档解析 | `DecompressionStream('deflate-raw')` | 浏览器内解 `.docx`，不上传 |
+| 移动壳 | **Capacitor 6**（`@capacitor/cli/core/android`） | 唯一需要 Node 的环节，仅用于打包 |
+| 云构建 | **GitHub Actions** + `setup-java` / `setup-android` | push 即出 debug APK 并发布到 Release |
+| AI（可选） | 任意 **OpenAI 兼容**端点（含视觉模型）/ 复制粘贴桥 / 本地意图提取 | 三条通道，契约恒定；Key 只存本机 |
+| 质量 | Node `vm` 沙箱跑浏览器模块 | 221 项逻辑测试 + 静态接线审计 + 跨模块引用对账 |
+
+**没有后端。** 全部逻辑与数据都在客户端；AI 调用是你主动配置的可选增强。
+
+---
+
+## 🚀 快速开始
+
+### 环境要求
+
+- **只想用**：一个现代浏览器（Chrome / Edge / Safari）。不需要 Node、不需要 npm。
+- **想改代码**：Node ≥ 18（跑回归测试与打包脚本）。
+- **想本机出 APK**：JDK 17 + Android SDK（或用 `_tools/toolchain-and-build.ps1` 一键装到项目内，不写系统、不要管理员）。
+
+### 安装与运行
+
+```bash
+git clone https://github.com/yjy1122/noadic.git
+cd noadic
+```
+
+**方式 A — 零安装**：双击 `www/index.html`。首次打开自动载入 127 个种子词。
+
+**方式 B — 要发音与 PWA**（Service Worker 需要 http(s)）：
+
+```bash
+python -m http.server 8080 -d www      # 或任意静态服务器
+# 打开 http://localhost:8080/ ，可「添加到主屏幕」离线使用
+```
+
+**方式 C — 直接装 APK**（不用登录，公开库直链）：
 
 ```
-新建文件夹/
-├── www/                    ← 唯一 web 根（Capacitor 的 webDir）
-│   ├── index.html          应用外壳（5 视图 + 底部导航 + 设置面板 + 词条编辑）
-│   ├── css/app.css         浅色主题、底部导航、安全区适配、手机端底部面板
-│   ├── manifest.webmanifest PWA 清单（图标/短名称/standalone）
-│   ├── sw.js               Service Worker（http(s) 下注册；在原生壳里自动跳过）
-│   ├── icon-*.png          192/512/maskable/apple-touch 图标（脚本生成）
+https://github.com/yjy1122/noadic/releases/download/latest-debug/app-debug.apk
+```
+
+`latest-debug` 每次 push 自动更新；正式版本看 [Releases](https://github.com/yjy1122/noadic/releases)。装法：传到手机 → 点击安装 → 允许「安装未知来源应用」。
+
+### 配置 AI 增强（可选）
+
+**没有 `.env`，没有配置文件** —— 全部在应用内「⚙ 设置 → AI 端点」填写，只存本机 `localStorage`：
+
+| 字段 | 说明 |
+| --- | --- |
+| Base URL | 填到 `/v1` 为止，例如 `https://api.openai.com/v1`；本地 Ollama 之类填 `http://localhost:11434/v1` |
+| Model | 模型名；拍照识别需**支持视觉**的模型 |
+| API Key | 仅存本机，不上传任何服务器 |
+
+填完点 **🔌 测试连接**，它返回**分类结论**而不是笼统的「失败」：`连通 ✅（123ms，发现 5 个模型）` / `鉴权失败（401）` / `404：Base URL 路径不对` / `429：限流或额度不足` / `请求没能发出：多为 CORS 拦截`（此时改用复制粘贴桥）/ `还没填 Base URL`。`/models` 不支持时自动退化成一次 `max_tokens:1` 的最小 chat 试探。
+
+> **不配 key 会损失什么？** 只损失「AI 补全音标/例句/搭配」和「拍照识别」。去重、出题、判卷、错题闭环、顺序闯关、写作阅读联动全部照常工作 —— 它们不依赖网络。
+
+### 构建 APK
+
+三条路线（详见 [`BUILD-APK.md`](BUILD-APK.md)）：
+
+1. **云构建（推荐，本机零安装）**：`git push` → Actions 自动出包并发布到 Release。
+2. **本机一键**：`powershell -ExecutionPolicy Bypass -File _tools\toolchain-and-build.ps1`（7 步幂等，工具链装进 `.tooling\`）。
+3. **已有 JDK/SDK**：`npm install && npx cap add android && npx cap sync && cd android && gradlew.bat assembleDebug`。
+
+### 开发自检
+
+```bash
+node _tools/test-logic.mjs            # 221 项端到端逻辑测试（在 Node vm 里把浏览器模块当无头环境跑）
+node _tools/audit-wiring.mjs          # JS 语法 + 全部 #id 选择器对账
+node _tools/xref.mjs                  # 跨模块引用对账（抓"开机即抛"的名字错）
+powershell -ExecutionPolicy Bypass -File _tools\check-workflow.ps1 -SelfTest
+                                      # 校验 CI 配置；-SelfTest 故意破坏它，验证这条检查真有牙
+```
+
+---
+
+## 🗺 路线图
+
+### 已完成
+
+- [x] Mode 1 录入契约：粘贴 / `.docx` 浏览器内解析 / `.csv` / `.json`，脏形状归一
+- [x] 去重四情形与进度保护、dry-run 预览、单槽撤销
+- [x] 内置离线词典包（129 条英式 IPA + 搭配 + 例句，30 条易混/熟词生义池）
+- [x] 五题型出题与判卷、形近/义近/同词性/同词根干扰项引擎
+- [x] 错题闭环：错因记录、冷却+配额+轮转、强制换题型、2 种不同题型答对才掌握
+- [x] Unit → Lesson 两级词库；按课次块顺序闯关（达标线可调、锁定不回摆、回潮标记）
+- [x] 题型专项模式（混合轮换 + 五个单型）
+- [x] Mode 3：写作微段落离线批改 + 150–200 词定制短文 + 长难句分层拆解
+- [x] 触屏滑动切题、键盘作答、自动连答、紧凑题头 + 可展开设置面板
+- [x] 三种粒度删除（单词 / 整课 / 整单元）+ 报数确认 + 撤销连带恢复通关锁定
+- [x] AI 连通性自检与失败分类
+- [x] 浅色 App 化界面、PWA、Capacitor APK、Actions 云构建 + Release 自动发布
+- [x] 221 项回归测试与三道静态审计
+
+### 计划中
+
+- [ ] 真机手势与布局回归（滑动切题、底部面板在低端机上的表现）
+- [ ] 截图与演示 GIF 补齐（见上方占位）
+- [ ] 作文批改维度对齐真题评分档（目前为离线规则 + 可选 AI 精批）
+- [ ] 语法填空 / 翻译真题专项题型
+- [ ] 多词表包迁移（考研 / 雅思 / 自定义书表），复用同一套去重与闯关内核
+- [ ] 端到端加密的可选云同步（默认仍然纯本地）
+- [ ] iOS 打包路线（`cap add ios` 需要 macOS + Xcode）
+
+---
+
+## 📄 开源协议
+
+[MIT © 2026 yjy1122](LICENSE)
+
+选 MIT 是因为这类个人学习工具的价值在于**被人拿去改成适合自己那本书的词表**：随便用、随便改、随便商用，保留版权声明即可。
+
+---
+
+## 数据与隐私
+
+- 词库、学习进度、错题本、设置、API Key 全部存在**你设备的 `localStorage`**（键 `noadic.v1` / `noadic.undo`），本仓库不含任何账号或遥测代码。
+- 唯一的出网请求是你主动配置的 AI 调用；不配置则整个应用零网络。
+- 换设备：设置 → 导出 JSON；导入走同一套合并去重，**不会**冲掉进度。改名前（`CET-4 词汇引擎`）导出的备份文件仍然能直接导入。
+
+## 目录结构
+
+```
+noadic/
+├── www/                        ← 唯一 web 根（Capacitor 的 webDir）
+│   ├── index.html              应用外壳（5 视图 + 底部导航 + 设置面板 + 编辑弹窗）
+│   ├── css/app.css             浅色主题、底部导航、安全区、手机端底部面板
+│   ├── manifest.webmanifest    PWA 清单
+│   ├── sw.js                   Service Worker（http(s) 下注册，原生壳里自动跳过）
 │   └── js/
-│       ├── seed-words.js       样例.docx 机器解析出的 127 词（释义与 Word 原文一致）
-│       ├── lexicon.js          词形归一 / 别名 / 屈折还原 / 重复判定与合并 ← 去重唯一真源
-│       ├── dict-extra.js       离线词典包：127 词英式 IPA+搭配+例句，另含 30 个易混/熟词生义扩展词
-│       ├── store.js            localStorage + 双索引 + 撤销快照 + 导入导出 + 单元达标线
-│       ├── parse.js            录入通道：粘贴文本 / .docx（浏览器内解压）/ .csv / .json
-│       ├── distractors.js      干扰项引擎：形近(编辑距离+前后缀) / 义近 / 同词性 / 同词根
-│       ├── quiz.js             出题调度、五题型、判卷、错题状态机、顺序闯关、Mode 3 生成
-│       ├── ai.js               Mode 1 契约（本地意图提取 / 复制粘贴桥 / 直连端点）+ 写作批改
+│       ├── seed-words.js       样例教材解析出的 127 词
+│       ├── lexicon.js          归一 / 别名 / 屈折 / 去重合并 ← 去重唯一真源
+│       ├── dict-extra.js       离线词典包与易混池
+│       ├── store.js            存储 + 双索引 + 撤销快照 + 层级统计与批量删除
+│       ├── parse.js            录入通道（粘贴 / docx / csv / json）
+│       ├── distractors.js      干扰项引擎
+│       ├── quiz.js             出题调度、五题型、判卷、错题状态机、Mode 3
+│       ├── ai.js               Mode 1 三通道 + 连通性分类 + 写作批改
 │       ├── ui.js               渲染层
 │       └── app.js              装配与事件流
-├── assets/icon.png, splash.png   APK 图标与开屏图源图（1024 / 2732）
-├── capacitor.config.json   appId com.noadic.app、webDir www、白色启动背景
-├── package.json            Capacitor 依赖与脚本
-├── build-apk.ps1           本机一键出包（先检查 JDK/SDK，缺什么直说缺什么）
-├── .github/workflows/android.yml   云构建：push 即出 app-debug.apk 产物
-├── BUILD-APK.md            三条打包路线 + 装 APK 后要注意的三件事
-└── _tools/
-    ├── parse_seed.py       docx → www/js/seed-words.js 的生成脚本
-    ├── make-icons.py       Pillow 生成图标/开屏 PNG
-    ├── test-logic.mjs      139 项端到端逻辑测试（Node 里把浏览器模块当无头环境跑）
-    ├── audit-wiring.mjs    静态审计：JS 语法 + 全部 #id 选择器对账
-    └── peek.mjs            抽样打印：短文 / 单元步骤 / 第一题 / 五段反馈
-```
-
-## 运行
-
-- **最快**：双击 `www/index.html`。首次打开自动载入 127 词（Unit 2 / Unit 3）。
-- **想要发音/PWA**：起静态服务再开，例如 `python -m http.server 8080 -d www` → `http://localhost:8080/`。
-- **出 APK**：看 `BUILD-APK.md`。本机缺 JDK 17 与 Android SDK（只有 JRE 8），当前出不了包；推荐用仓库里现成的 GitHub Actions 云构建，零安装拿 APK。
-- 数据只在本机。换设备用「设置 → 导出 JSON」，导入时同样走合并去重，**不会**把进度冲掉。
-
-## 出题规则（Mode 2）
-
-| 题型 | 说明 | 前置条件 |
-|---|---|---|
-| 四选一·英译中 | 干扰项必须形近/义近/同词性/同词根，无无关干扰项 | 词库+扩展池 ≥3 个相关词 |
-| 四选一·中译英 | 同上，反向 | 有中文释义 |
-| 语境填空 | 用例句挖空，**考词形变换**（原形作答判错并提示正确形式） | 有英文例句 |
-| 熟词生义 | 有语境句走语境题，否则问「它还有哪个含义」 | 有 ≥2 个义项 |
-| 听音拼写 | 只给 IPA + 中文提示（可点 🔊 朗读），接受异形拼写 | 有音标 |
-
-### 题型方案（混合轮换 + 五个专项）
-
-测验页第二行的分段控件，默认 **混合轮换**（= 原方案，按设置里勾选的题型轮换）。另外五个是专项，点一下即只出该题型：
-
-`看词选义` ｜ `看义选词` ｜ `语境填空` ｜ `熟词生义` ｜ `听音拼写`
-
-每个按钮后面的数字是**当前词库里能出这个题型的词数**（例如缺音标的词出不了听写）。三条要记住的语义：
-
-1. **掌握判定不因专项而改变**——仍需「2 种不同题型答对」。所以专项适合单点突破（比如专攻拼写），**收口要切回混合轮换**，否则同一题型的第二次答对不会让你毕业。界面下方会实时写清这一点。
-2. 专项下不满足前置条件的词**自动跳过**，不会硬出题；若某词只支持被关掉的题型，它本轮就不出现。
-3. 专项模式下，错题的「必须换题型」约束自动让位（否则无题可出），错题仍会高频复现。
-
-**错题闭环**：答错 → 立即入错题本并记混淆原因（误选项与目标词的混淆类型 / 拼写差几个字母 / 词形未变换）→ 该词 `correctTypes` 清零 → 后续按冷却轮转高频复现，且**强制更换题型** → 在 **2 种不同题型**上答对才移入「已掌握」，之后以低概率回炉抽查。
-
-**按书推进**：新词严格按词库顺序（= 你拍照录入的书上顺序）逐个引入；错题只「插队」不「打乱」。设置里可调复习占比（默认 70% 复习 / 30% 新书），顶部实时显示 `书上进度 N/总数 ｜ 下一个 xxx`。
-
-## 录入与重复处理（Mode 1）
-
-支持你实际的输入形状（AI 拍照提取出来的文本），逐行归一化后再拆分：
-
-`Unit N` / `Word List 3` / `第3单元` 分册 · Tab 两列 · Markdown 表格 `| realm | n. 领域 |` · `单词：释义` · `单词 — 释义` · `realm /relm/ n. 领域`（内联音标自动剥离）· 中文词性 `名词，领域` → `n. 领域` · `1. abandon` 行首序号与 `abandon 001` 行尾页码 · `例：…` 行内例句自动拆成 example_en/zh · 单词行与释义行被折成两行 · 页码页眉噪声行丢弃。
-
-### 导入归属（Unit / Lesson 选择器）
-
-录入面板有一行 **导入归属**：`自动识别单元` + `自动识别课次`（都可新建）。这是为你分页拍照提取的实际场景做的——**一页里常常只有 `Lesson 3` 而没有 `Unit 1`**，此时把单元钉住，该页所有词就挂进 `Unit 1 · Lesson 3`；文本里若真的出现了 `Unit/Lesson` 标题，标题仍然生效（钉住只补空缺的父级）。
-
-- 完全没钉、文本里也只有 `Lesson 3` → 该课次标题**升为顶层**（老式只有 `Word List N` 的书表不会被误判成孤儿）。
-- 预览表有「归属」列，缺父级时标 `缺单元` 并在汇总条计数，入库前就能看见。
-- 已定过归属的词**不会被重导入挪走**：合并只补空缺字段，不改已有单元/课次。
-- 解析结果里的 `structure`（如 `Unit 1 · Lesson 1 → Unit 1 · Lesson 2`）只列真的有词的叶子块。
-
-重复判定（`lexicon.js`）：
-
-1. **归一**：大小写/空格无关；`despatch/dispatch`、`flavo(u)r` 拆成硬别名；`so-called`↔`so called`。
-2. **英美异形是「软别名」**：只用于查重，绝不写进词条拼写（所以 `pour` 不会被误生成 `por` 这种假词），命中时提示 `英美异形：color = colour`。
-3. **词形还原**：不反向猜词元，而是对库内已有词生成屈折变形表来匹配新词（`assumes → assume`），不规则动词单独处理（`ground → grind`）。
-4. **三种结果**，预览表逐行标注：`新增` / `合并`（义项取并集，"领域"⊂"领域，场所"择优保留，追加"也见于 Unit X"）/ `重复忽略`（归一后释义一致）。同一次粘贴内的自我重复也折叠。
-5. **进度永不被导入重置**：`status`、错次、`correctTypes` 原样保留。唯一例外是导入自己的备份：备份历史更长时以备份为准。
-6. 预览是 dry-run，不污染索引；确认入库后可一键**撤销上次入库**。
-
-补全优先级：**内置离线词典包**（免费、离线、无 key，覆盖样例 127 词）→ **AI 通道**（可选）→ **手动编辑**。
-
-## AI 通道（可插拔）
-
-1. **本地意图提取**（无需模型）：`把 postpone 加进生词本`、`「undertake」这个词帮我记一下`。只收中文环境里**隔离出现**的英文词，不会逐词吞掉整句英文；`a/the/is/at` 等极简词被过滤，但保留其作为短语一部分的情况。
-2. **复制粘贴桥**（对任意大模型可用）：生成符合 Mode 1 契约的 Prompt → 贴给模型 → 把回复粘回来 → 自动剥 ```` ```json ```` → 进入同一张入库预览表。**推荐用这条**，因为浏览器直连云端 API 会被 CORS 拦。
-3. **直连端点**（OpenAI 兼容）：设置里填 Base URL / Model / Key（Key 只存本机）。适合本地 Ollama 之类允许跨域的服务。图片录入（拍照识别生词表）需支持视觉的模型。
-
-输出契约恒定：`{ has_words, reply_message, words[{word, phonetic, pos, definition, collocation, example_en, example_zh}] }`。
-
-## 词库：Unit → Lesson 两级分组
-
-> 你的书是 `Unit → Lesson` 结构（一个单元下若干课），所以词库现在是**两级分组**：外层单元卡、内层课次卡，各自带进度条、计数和动作；没有课次的词表（如样例 docx）自动退回单层。
-
-词库默认**按单元分组**（组头 = 你导入时的 `Unit N` / `List N` / `第N单元`），每组显示：
-
-`共 N 词 · 已掌握 x（y%）`＋彩色进度条，以及分色计数 `掌握 / 错题 / 学习中 / 待测 / 缺补全`，并带动作：
-
-- **只练本单元** → 切到测验，把出题范围锁定该单元（新词仍按书序推进，错题在复习配额内插队）。
-- **补全 N 项** → 先用内置离线词典免费补齐该单元缺的音标/例句；补不齐的才走 AI（配了端点走直连，否则自动帮你生成复制粘贴桥的 Prompt）。
-- **删除单元**（红色）→ 连带其下所有课次一起删，先弹确认框报数。课次卡片上另有 **只练这课** 和 **删除本课**（红色），只动这一课。详见下面「词库删除」。
-
-其它约定：
-
-- 归属以**主单元**（第一次录入它的单元）为准，跨册再遇到同一个词时在词条上标 `也见于 Unit 9`，**不会**在两个组里重复计数，也不会因此重置进度。
-- 单元名按自然序排（`Unit 2 < Unit 10`，不是字典序）。
-- 没有单元标题的粘贴内容归入 `未分组`。
-- 工具栏 `▦ 按单元分组 / ☰ 平铺列表` 可切换；折叠状态、分组偏好都存在本机设置里。排序三种：书序（默认）/ 错题权重 / 字母。
-- 测验页顶部的范围条同样按单元列出（带词数与掌握数），与词库分组一致。
-
-## 按单元顺序学习（顺序闯关，默认开启）
-
-> **推进单位是课次块**（`Unit 1 · Lesson 2`），达标线也落在课次上；单元是其汇总——**一个单元下所有课次都通关，该单元才算通关**。没有课次的词表自动退回以单元为块，行为与之前一致。
-
-测验页顶部两套控件：模式开关 `▶ 按单元顺序学 / ∞ 自由混合练习` 与 `▶ 继续学习`（一键回到顺序线当前块）；下面是**步骤条**——每个课次块一张卡（有课次时同时显示所属单元），`✓ 已通关 / ▶ 进行中 / 🔒 未开始`，显示 `掌握数/总数`、错题数、进度条与「还差几个」。点任意卡＝**回看该块**（顺序线暂停，点「继续学习」返回）。
-
-推进规则：
-
-1. **当前块** ＝自然序上最早的未通关块；出题范围只含它，块内新词仍严格按书序逐个引入。没有编号的「未分组」排在最后，不会劫持你从 Unit 1 开始的路线。
-2. **达标线**：本块「已掌握 ≥ 80%（可调 50–100%）且错题清零」→ 通关并锁定。
-3. **锁定不回摆**：之后抽查再错，单元仍算通关，但卡片标 `回潮 N`，且这些错题**继续插队复习**（设置里可关），不会烂在身后。
-4. 默认达标即自动进入下一单元并提示；关掉「达标后自动进入下一单元」则停在边界出**通关卡**（进入下一个 / 留在本单元回看）。
-5. 全部通关后范围不再限制，可随意回看；重置某单元会撤销锁定并把该单元词退回待测。
-
-顺序模式与范围条的交互已对齐：点单元＝回看；点「全部词库 / 未掌握」＝自动切到自由模式并明确提示，避免"点了没反应"的错觉。
-
-## Mode 3
-
-- **写作联动**：抽 3 个错词（不足则用未掌握/全书词兜底）→ 写微段落 → 离线规则批改（是否用上、字数、逗号拼接、`very/many/think/more and more/help/because of` 的高分替换）；配好端点可切 AI 精批。
-- **阅读联动**：按近期难词库拼 150–200 词四级风格短文 + 生词表 + 最长句的长难句分层拆解。
-
-## 测验界面（已简化）
-
-四层控件压成**一条进度带**：`当前学习块 · 掌握 x/y · 混合轮换` + 细进度条 + `调整⌄`。点一下才展开设置面板（模式 / 题型方案 / 步骤条 / 范围 / 重开一轮），平时屏幕上只有一张题卡。卡片头也精简为：题型标签 + 状态短标（`错题 ×2`、`待确认 1/2`）+ 朗读 + 右侧小字归属。
-
-五段反馈的标签结构（【判定】【正确答案与考点】【解析与避坑】【真题/语境例句】【当前进度】）保持不变——那是考核规范的一部分，只是配色和间距收紧了。
-
-## 操作方式
-
-- **触屏**：卡片**左滑或右滑都是下一题**；未作答时滑动＝**跳过本题**（不计分、不判错，进待重看队列，下一题就轮回来）。设置里可关。
-- **键盘**：`1/2/3/4` 或 `A/B/C/D` 选项作答 · `Enter` 提交输入题 · `Enter/空格` 进入下一题。
-- **自动连答**：反馈后默认 5s 进下一题（可关）。
-- **词库删除（三种粒度）**：
-  - **单个单词**：每行一个红色`删除`按钮（编辑弹窗里也有）。
-  - **整个课次**：课次卡片头部的红色`删除本课`。
-  - **整个单元**：单元卡片头部的红色`删除单元`，连带其下所有课次；平铺模式或按单元筛选时，用词库工具栏上那个只在选中单元后出现的`删除「Unit 3」(N)`。
-  确认弹窗会先报数：词数、掌握/学习中/错题/待测分布、单元会列出连带清除的课次名；若当前筛选只显示了一部分，会明确提示"另外 M 个同样会被删掉"（**删的是该层级全部词，不只是屏幕上看见的那些**）。删除前自动打快照，**用词库上方「撤销上次改动」即可恢复**——错题记录、掌握进度、以及该课次/单元的"已达标"锁定一起回来。
-  为什么通关锁定也要清：锁定是按名字存的，词删光不会自己消失；留着的话日后重新导入同名课次会一进来就显示已达标，把顺序闯关的门直接跳过。
-
-## 设置里的「🔌 测试连接」
-
-填完 Base URL / Model / Key 后点一下，返回**分类结论**而不是笼统的"失败"：
-
-| 结果 | 判定 |
-|---|---|
-| `连通 ✅（123ms，发现 5 个模型，已包含 xxx）` | 正常 |
-| `鉴权失败（401）` | Key 无效/过期/无该模型权限 |
-| `404：Base URL 路径不对…` | 应填到 `/v1` 为止，或模型名不存在 |
-| `429：限流或额度不足` | 配额问题 |
-| `请求没能发出：多为 CORS 拦截…` | 云端 API 不放行跨域 → 用复制粘贴桥或本地端点 |
-| `还没填 Base URL` / `需要以 http(s):// 开头` | 配置本身不完整 |
-
-`/models` 不支持时会自动退化成一次 `max_tokens:1` 的最小 chat 试探；改 URL 或 Key 后结果自动清空，避免看旧结论。
-
-## 键盘操作
-
-`1/2/3/4` 或 `A/B/C/D` 选项作答 · `Enter` 提交输入题 · `Enter/空格` 进入下一题 · 反馈后默认 5s 自动下一题（可在设置关闭）。
-
-## 回归测试
-
-```
-node _tools/test-logic.mjs        # 211 项：义项解析/去重四情形/进度保护/撤销/docx 浏览器内解析/五题型/判卷/状态机/顺序闯关/两级层级/题型专项/滑动跳过/删除可撤销/整课整单元批量删除/连通性分类/契约/Mode 3/存储往返
-node _tools/audit-wiring.mjs      # 静态审计：JS 语法 + 全部 #id 选择器对账（无浏览器环境下的替代验证）
-node _tools/xref.mjs              # 跨模块引用对账：真实加载模块读导出键，抓 UI.renderPins 这类"开机即抛"的名字错
-node _tools/peek.mjs              # 抽样打印：生成的短文 / 步骤条 / 第一题 / 五段反馈
-python _tools/parse_seed.py       # 重新生成 www/js/seed-words.js（样例.docx 更新后）
-python _tools/make-icons.py       # 重新生成图标与开屏 PNG
+├── assets/                     APK 图标与开屏图源图（1024 / 2732）
+├── .github/workflows/android.yml   云构建 + 自动发布 Release
+├── _tools/                     测试、审计、图标生成、工具链安装、编码规范化
+├── BUILD-APK.md                三条打包路线
+└── HOWTO-git.md                Git 接入与本机网络/路径的坑（实测记录）
 ```
 
 ## 已知边界
 
-- `file://` 下 Service Worker 不注册、`navigator.clipboard` 可能需要手动复制；要 PWA 请用 http(s)。
-- 内置词典包只覆盖样例的 127 词 + 30 个扩展词；你自己导入的新词若词典包没有，音标/例句为空 → 语境填空与听写题会跳过这些词，直到你用 AI 或手动补全（词库可按「缺音标/例句」筛选）。
-- 阅读短文是**离线拼装**：句子原样取自你的例句库（语法正确），稳定落在 150–200 词（难词优先，池子不足会自动从全库补足），但**主题不连贯**——它练的是"在语境里认词"，不是篇章阅读。要连贯成文就配 AI 端点。
-- 默认就是顺序闯关；想全书混着练，切 `∞ 自由混合练习` 即可（新词仍按书序引入）。
-- **文件安全**：这台机器没装 git，开发过程中出现过一次 `www/index.html` 与 `www/js/ui.js` 被**静默清零**（内容全变 0x00，工具不报错）。已用 APK 内的同步副本恢复并补回改动。从现在起每次改动前后会往 `dist/backup/www-<时间戳>.zip` 存快照；**建议你装上 git**（`winget install Git.Git`）再做版本化提交，别把进度寄托在快照上。
-- 扩展易混池的作答进度只保留在本次会话内（它不入词库）。
-
-## 版本管理（便携版 Git）
-
-Git 装在 `.tooling\git`，**没有写进系统 PATH、不需要管理员权限**。项目根目录给了一个包装脚本：
-
-```powershell
-.\git.ps1 status
-.\git.ps1 log --oneline -5
-.\git.ps1 diff
-.\git.ps1 add -A ; .\git.ps1 commit -m "改了啥"
-```
-
-想在当前会话里直接用 `git`：`$env:Path = "$PWD\.tooling\git\cmd;" + $env:Path`。
-
-要点：
-
-- **提交身份只写在本仓库**（`--local`，初值是系统账户名 + 占位邮箱）。建议换成你自己的：`.\git.ps1 config user.email "you@example.com"`。
-- `.gitignore` 已排除 `.tooling/`（1.3 GB 工具链）、`node_modules/`、`android/`（Capacitor 生成物）、`dist/`（APK 与快照）。`.gitattributes` 声明了 PNG/APK/ZIP 为二进制，避免被换行处理破坏。
-- 含中文的 `.ps1` **必须存成 UTF-8 with BOM**，否则 PowerShell 5.1 按 GBK 解析会报"字符串缺少终止符"这类乱码错——我在这点上翻过一次车，编辑脚本后请确认 BOM 还在。
-- 再遇到这次这种文件被静默清零的情况，恢复命令是：`.\git.ps1 checkout -- www/js/ui.js`（比快照快且精确）。
-- 想推到 GitHub/Gitee 做异地备份：需要代理在线（这台机器直连 GitHub 的 HTTPS 下载路径不通，npmmirror 可用）。没有 git 客户端也可以用仓库网页上传，`.github/workflows/android.yml` 会自动出 APK。
-
-## 连上 GitHub（已验证可通，两个坑已填）
-
-这台机器直连 `github.com:443` 是被拒的，必须走本地代理；而 git 有两个坑：
-
-1. **git 不读 Windows 系统代理**（IE/注册表里那个 `127.0.0.1:10808` 它不认），得显式配 `http.proxy`；
-2. **openssl 后端的 CA 证书包路径含中文会被毁码**（`新建文件夹` → `??½??ļ???`），报 `error adding trust anchors`。解法是把 `http.sslCAInfo` 指到 ASCII 联接路径 `D:/noadic-build/...`。
-
-两条已经写进本仓库的 `.git/config`（local，不影响其它项目），实测 `git ls-remote https://github.com/git/git` 正常返回。**前提是代理客户端在线**（脚本会先探测 `127.0.0.1:10808`）。
-
-### 你要做的三步
-
-1. **建空仓库**：GitHub 网页 → New repository → 名字随意（建议 `noadic`）→ **公开/私有都行**（本仓库只有代码和种子词表，你的学习记录、错题本全在设备 localStorage 里，不会进仓库）→ **不要**勾选 "Add a README" / ".gitignore" / "license"（会让首次推送冲突）。记下 `用户名/仓库名`。
-2. **建 token**：Settings → Developer settings → **Fine-grained tokens** → Generate new token
-   - Repository access：Only select repositories → 选刚才那个仓库（或直接 All repositories）
-   - Permissions → Contents：**Read and write**
-   - Permissions → **Workflows**：**Read and write** ← 少了这项必定失败。仓库里有 `.github/workflows/android.yml`，GitHub 服务端会直接 `remote rejected`：`refusing to allow a Personal Access Token to create or update workflow ... without workflow scope`。这个限制只在**真推送**时才触发，`push --dry-run` 会照样通过，别被误导。
-   - （想看构建日志再加 Actions: Read-only；用 Tokens (classic) 就勾 `repo` + `workflow`）
-   - 复制好 token（只显示一次）
-3. **推送**：
-
-```powershell
-cd "D:\Users\DawnFish\Desktop\新建文件夹"
-.\connect-github.ps1 -Repo 你的用户名/noadic
-```
-
-脚本会提示粘 token（**不回显**），只写进 `.tooling\git-credentials`（`.gitignore` 已排除，不会进仓库），然后加 `origin` 并推 `main`。
-
-推成功后打开 **`https://github.com/你的用户名/noadic/actions`** —— 仓库里现成的 workflow 会自动构建（约 90 秒），构建完**直接发布到 Release**，不用再去 Artifacts 里翻 zip。
-
-### APK 从哪下（两条都自动）
-
-| 入口 | 内容 | 说明 |
-| --- | --- | --- |
-| **Releases → `latest-debug`** | `app-debug.apk` | 每次 `git push` 后**自动覆盖**，永远指向最新构建；标记为预发布，因为它是 debug 签名 |
-| **Releases → 你打的 `v*` 标签** | `app-debug.apk` | 冻结的某个版本，标记为正式（会占住仓库页的 "Latest" 按钮） |
-| Actions → Artifacts → `noadic-debug-apk` | 同上 | 每次 run 的原始产物留档，需要历史某次构建时才用 |
-
-日常装机就用第一个，直链（公开库，不用登录也能下）：
-
-```
-https://github.com/你的用户名/noadic/releases/tag/latest-debug                 ← 永远最新构建
-https://github.com/你的用户名/noadic/releases/download/latest-debug/app-debug.apk
-```
-
-> `/releases/latest` 这个"最新正式版"地址**只在存在非预发布的版本 Release 时才有效**：只有 `latest-debug`（预发布）时它会返回 404（实测）。等你按下面打第一个 `v*` 标签，它才指向你的最新版。
-
-发一个正式版本，只要打个 `v` 开头的标签再推上去，CI 会顺带把 Release 建好：
-
-```powershell
-.\git.ps1 tag -a v1.0 -m "noadic v1.0"
-.\git.ps1 push origin v1.0
-```
-
-标签必须 `v` 开头（workflow 里 `on.push.tags: ['v*']`）。删掉一个版本：`.\git.ps1 tag -d v1.0` + 在网页上删对应 Release（或用 API 删 `git/refs/tags/v1.0`）。
-
-> 覆盖安装不丢数据：学习记录、词库、错题本都在应用本地存储里，debug 签名一致，所以新版本直接装上就是接着用。debug 签名仅供自用，不要上架商店。
-
-### 备选：Gitee
-
-Gitee 走同一代理**当前也通**（`git ls-remote https://gitee.com/mirrors/git.git` 实测成功），国内速度更稳，适合纯备份：
-
-```powershell
-.\git.ps1 remote add gitee https://gitee.com/你的用户名/noadic.git
-.\git.ps1 push -u gitee main
-```
-
-但 Gitee 没有 GitHub Actions，**自动出 APK 这条只在 GitHub 上成立**。
-
-## 下一步（手机端）
-
-代码已留好 PWA 钩子：`manifest.webmanifest` + `sw.js` + 响应式底部导航。把整个目录放到任意静态空间（或家里内网），手机浏览器打开 → 添加到主屏幕，即可离线使用，无需重写一版 App。若要上架商店或需要原生相机/推送，再走 uni-app / Flutter，把 `js/*.js` 的业务层原样复用（它们不依赖 DOM）。
+- `file://` 下 Service Worker 不注册、剪贴板 API 可能需手动复制；要 PWA 请用 http(s)。
+- 你自己导入的新词若不在内置词典里，音标/例句为空 → 语境填空与听写题会**跳过**这些词，直到用 AI 或手动补全（词库可按「缺音标/例句」筛选，单元卡上有一键补全）。
+- 阅读短文是**离线拼装**：句子原样取自你的例句库，长度稳定落在 150–200 词，但**主题不连贯** —— 它练的是「在语境里认词」，不是篇章阅读。要连贯成文请配 AI 端点。
+- 扩展易混池（30 词）的作答进度只保留在本次会话内，它不入词库。
+- APK 是 **debug 签名**，仅供自用与安装测试，不要上架商店。
