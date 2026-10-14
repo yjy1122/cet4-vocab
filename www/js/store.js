@@ -126,6 +126,9 @@ const Store = (() => {
   }
 
   /* ---------- 两级层级：Unit（父）→ Lesson / List（子） ---------- */
+  /** 层级视图只认真实词条：干扰项扩展池的词不属于书的任何一课，
+   *  混进来的话顺序闯关会把"只有池词的幽灵课次"当成当前块（出题池被 !pool 一filter 就空，卡死）。 */
+  const bookWords = () => state.words.filter((w) => !w.pool);
   const numsOf = (s) => (String(s).match(/\d+/g) || []).map(Number);
   /** 自然序：逐段比较编号，"Unit 2 · Lesson 10" 排在 "Unit 2 · Lesson 9" 之后、"Unit 10" 之前 */
   function labelOrder(a, b) {
@@ -145,12 +148,12 @@ const Store = (() => {
   const unitKey = (w) => w.unit || (w.units && w.units[0]) || "未分组";
   const blockKey = (w) => (w.lesson ? unitKey(w) + " · " + w.lesson : unitKey(w));
 
-  const units = () => [...new Set(state.words.map(unitKey))].sort(labelOrder);
-  const blocks = () => [...new Set(state.words.map(blockKey))].sort(labelOrder);
+  const units = () => [...new Set(bookWords().map(unitKey))].sort(labelOrder);
+  const blocks = () => [...new Set(bookWords().map(blockKey))].sort(labelOrder);
 
   function groupStats(keyFn) {
     const map = new Map();
-    for (const w of state.words) {
+    for (const w of bookWords()) {
       const k = keyFn(w);
       if (!map.has(k)) map.set(k, { label: k, unit: k, lesson: "", total: 0, new: 0, learning: 0, wrong: 0, mastered: 0, unenriched: 0, seen: 0, correct: 0 });
       const s = map.get(k);
@@ -167,8 +170,8 @@ const Store = (() => {
   /** 按课次（子级，最小学习块）统计 */
   const blockStats = () => groupStats(blockKey).map((s) => ({ ...s, unit: s.label.split(" · ")[0], lesson: s.label.split(" · ")[1] || "" }));
 
-  const wordsOf = (unit) => state.words.filter((w) => unitKey(w) === unit).sort((a, b) => state.words.indexOf(a) - state.words.indexOf(b));
-  const wordsOfBlock = (label) => state.words.filter((w) => blockKey(w) === label).sort((a, b) => state.words.indexOf(a) - state.words.indexOf(b));
+  const wordsOf = (unit) => bookWords().filter((w) => unitKey(w) === unit).sort((a, b) => state.words.indexOf(a) - state.words.indexOf(b));
+  const wordsOfBlock = (label) => bookWords().filter((w) => blockKey(w) === label).sort((a, b) => state.words.indexOf(a) - state.words.indexOf(b));
 
   /* ---------- 顺序闯关：达标线落在课次上，单元做汇总 ---------- */
   const inUnit = (w, unit) => !unit ? true : ((w.units && w.units.length ? w.units : [w.unit]).includes(unit) || unitKey(w) === unit);
@@ -222,7 +225,7 @@ const Store = (() => {
     return a ? a.label : null;
   }
   const currentUnit = () => currentBlock();
-  const allCleared = () => state.words.length > 0 && blockFlags().every((u) => u.cleared);
+  const allCleared = () => bookWords().length > 0 && blockFlags().every((u) => u.cleared);
 
   /** 检查并锁定新达标的课次块，返回本次刚通关的块名 */
   function syncCleared() {
@@ -317,7 +320,13 @@ const Store = (() => {
 
   /* ---------- 撤销一次入库 ---------- */
   function snapshot() {
-    try { localStorage.setItem(UNDO_KEY, JSON.stringify({ at: Date.now(), words: state.words })); } catch (e) { }
+    // 连通关锁定一起存：批量删课/删单元会清掉这些标记，只回滚词条的话，
+    // 撤销回来的单元会因为丢了"已达标"锁而重新变成未通关（有残留错题时尤其明显）。
+    try {
+      localStorage.setItem(UNDO_KEY, JSON.stringify({
+        at: Date.now(), words: state.words, flags: { ...(state.settings.unitCleared || {}) },
+      }));
+    } catch (e) { }
   }
   function canUndo() {
     try { const r = localStorage.getItem(UNDO_KEY); return r ? !!JSON.parse(r).words : false; } catch (e) { return false; }
@@ -329,6 +338,7 @@ const Store = (() => {
       const p = JSON.parse(r);
       if (!p || !Array.isArray(p.words)) return null;
       state.words = p.words;
+      if (p.flags && typeof p.flags === "object") state.settings.unitCleared = p.flags;
       rebuild(); save();
       localStorage.removeItem(UNDO_KEY);
       return { at: p.at, count: p.words.length };
@@ -352,6 +362,69 @@ const Store = (() => {
     const i = state.words.findIndex((w) => w.id === id);
     if (i < 0) return false;
     state.words.splice(i, 1); rebuild(); save(); return true;
+  }
+
+  /* ---------- 按层级批量删除：整课 / 整单元 ---------- */
+  /** pool 词（干扰项扩展池）不属于任何真实课次，任何层级删除都不能碰它 */
+  function inScope(w, kind, label) {
+    if (w.pool) return false;
+    return (kind === "lesson" ? blockKey(w) : unitKey(w)) === label;
+  }
+  const scopeWords = (kind, label) => state.words.filter((w) => inScope(w, kind, label));
+
+  /** 删除前给确认框看的数字——与 removeScope 真正删的走同一个 scopeWords，不会看一套删一套 */
+  function scopeStats(kind, label) {
+    const list = scopeWords(kind, label);
+    const c = state.settings.unitCleared || {};
+    const s = {
+      kind, label, total: list.length, new: 0, learning: 0, wrong: 0, mastered: 0,
+      unenriched: 0, lessons: [], words: list.map((w) => w.word), cleared: false, clearedAt: null,
+    };
+    const ls = new Set();
+    for (const w of list) {
+      s[w.status] = (s[w.status] || 0) + 1;
+      if (!w.enriched) s.unenriched++;
+      if (w.lesson) ls.add(w.lesson);
+    }
+    s.lessons = [...ls].sort(labelOrder);
+    if (kind === "lesson") {
+      const g = blockFlags().find((b) => b.label === label);
+      s.cleared = !!(g && g.cleared);
+      s.clearedAt = c[label] || null;
+    } else {
+      const g = unitFlags().find((u) => u.unit === label);
+      s.cleared = !!(g && g.cleared);
+      const keys = Object.keys(c).filter((k) => k === label || k.startsWith(label + " · "));
+      s.clearedAt = keys.length ? Math.max(...keys.map((k) => c[k])) : null;
+    }
+    return s;
+  }
+
+  /**
+   * 删除整个课次（kind="lesson"，label 为 "Unit 1 · Lesson 2"）或整个单元
+   * （kind="unit"，label 为 "Unit 1"，连带其下所有课次）。
+   * 自带快照：撤销通道与单词删除同一条，删错可恢复（只留最近一次）。
+   */
+  function removeScope(kind, label) {
+    const doomed = new Set(scopeWords(kind, label).map((w) => w.id));
+    if (!doomed.size) return { removed: 0, ids: [], clearedFlags: [] };
+    snapshot();
+    const before = state.words.length;
+    state.words = state.words.filter((w) => !doomed.has(w.id));
+    /* 通关锁定是按名字存的，词删光不会自己消失。留着的话，日后重新导入同名课次
+     * 会一进来就显示「已达标」，顺序闯关的门被直接跳过 —— 必须连带清掉。 */
+    const c = { ...(state.settings.unitCleared || {}) };
+    const clearedFlags = [];
+    for (const k of Object.keys(c)) {
+      const mine = kind === "lesson" ? k === label : (k === label || k.startsWith(label + " · "));
+      if (mine) { delete c[k]; clearedFlags.push(k); }
+    }
+    state.settings.unitCleared = c;
+    const col = { ...(state.settings.collapsed || {}) };
+    for (const k of Object.keys(col)) if (k === label || k.startsWith(label + " · ")) delete col[k];
+    state.settings.collapsed = col;
+    rebuild(); save();
+    return { removed: before - state.words.length, ids: [...doomed], clearedFlags };
   }
 
   /* ---------- 设置 ---------- */
@@ -395,7 +468,7 @@ const Store = (() => {
     load, save, rebuild, indexContext, byId, stats, units, unitStats, unitKey, wordsOf, unitOrder, seed, backfill, plan, addAll, commitPlan,
     unitFlags, blockFlags, blockStats, blocks, blockKey, inBlock, wordsOfBlock, resetBlock,
     currentUnit, currentBlock, syncCleared, allCleared, inUnit, gateMet, unclear, resetUnit, labelOrder,
-    snapshot, undo, canUndo, update, remove, setSetting, exportJSON, importJSON, wipe, usage,
+    snapshot, undo, canUndo, update, remove, scopeWords, scopeStats, removeScope, inScope, setSetting, exportJSON, importJSON, wipe, usage,
     DEFAULT_SETTINGS,
   };
 })();

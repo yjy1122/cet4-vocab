@@ -249,6 +249,14 @@ table.dt tr.dup td { opacity: .5; }
 .ug-chips, .ug-acts { grid-column: 1 / -1; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 .ug-acts button { font-size: 12px; padding: 6px 10px; border-radius: 9px; background: #fff; border: 1px solid var(--line2); color: var(--sub); cursor: pointer; min-height: 32px; }
 .ug-acts button:hover { color: var(--acc); border-color: #c9dbff; }
+/* 批量删除（整课/整单元）用危险色，和普通操作一眼分开 */
+.ug-acts button.danger, .lg-acts button.danger { color: var(--bad); border-color: #f6d6d6; background: var(--bad-soft); }
+.ug-acts button.danger:hover, .lg-acts button.danger:hover { color: #fff; background: var(--bad); border-color: transparent; }
+button.primary.danger { background: var(--bad); border-color: transparent; color: #fff; }
+button.primary.danger:hover { background: #b91c1c; }
+.del-scope { margin: 8px 0 6px; padding-left: 20px; line-height: 1.65; }
+.del-scope li { margin: 2px 0; }
+.del-scope li.bad { color: var(--bad); font-weight: 700; }
 .ubar { grid-column: 1 / -1; height: 7px; border-radius: 999px; background: var(--soft); overflow: hidden; border: 1px solid var(--line); }
 .ubar i { display: block; height: 100%; min-width: 3px; background: linear-gradient(90deg, #22c55e, var(--ok)); transition: width .35s; }
 .ugroup > .list { padding: 11px; }
@@ -275,7 +283,7 @@ pre { background: var(--card2); border: 1px solid var(--line); border-radius: 11
 /* ---------- 断点 ---------- */
 @media (min-width: 720px) {
   .grid2 { grid-template-columns: 1fr 1fr; }
-  .lib-tools { grid-template-columns: 1.6fr .9fr .9fr auto auto auto; }
+  .lib-tools { grid-template-columns: 1.6fr .9fr .9fr auto auto auto auto; }
   .qopts { grid-template-columns: 1fr 1fr; }
   .fb-row { grid-template-columns: 172px 1fr; }
 }

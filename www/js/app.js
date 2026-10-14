@@ -411,7 +411,7 @@ const app = (() => {
     $("#btn-intent-open").onclick = intentExtract;
     $("#btn-undo-import").onclick = () => {
       const u = Store.undo();
-      if (!u) return UI.toast("没有可撤销的入库记录。", true);
+      if (!u) return UI.toast("没有可撤销的操作（只保留最近一次入库或批量删除）。", true);
       UI.renderProgress(); UI.renderLibrary(); UI.renderWrongbook();
       UI.toast(`已回滚到 ${new Date(u.at).toLocaleTimeString()} 的 ${u.count} 词状态`);
     };
@@ -425,6 +425,7 @@ const app = (() => {
     $("#lib-search").oninput = () => UI.renderLibrary();
     $("#lib-unit").onchange = () => UI.renderLibrary();
     $("#lib-status").onchange = () => UI.renderLibrary();
+    $("#btn-del-unit").onclick = () => { const u = $("#lib-unit").value; if (u) UI.askScopeDelete("unit", u); };
 
     $("#btn-wb-clear").onclick = () => {
       if (!confirm("清空全部错题记录（词条本身保留，状态回到待测）？")) return;

@@ -646,6 +646,120 @@ const TEST = String.raw`
     Store.settings.ai = { baseURL: "", model: "", key: "" };
   })();
 
+  /* ---------- X 整课 / 整单元批量删除 ---------- */
+  (function () {
+    const before = Store.words.length;
+    const book = [
+      "Unit 8", "Lesson 1",
+      "zebra\tn. 斑马",
+      "yacht\tn. 游艇",
+      "Lesson 2",
+      "quartz\tn. 石英",
+      "uranium\tn. 铀",
+      "Unit 9", "Lesson 1",
+      "walnut\tn. 胡桃",
+      "wattle\tn. 篱笆",
+    ].join("\n");
+    const res = Store.addAll(Parse.text(book).candidates, "merge", { silent: true });
+    Store.rebuild();
+    ok("X1 造出两级夹具（2 单元 / 3 课次）", res.added >= 4 && Store.scopeStats("unit", "Unit 8").total >= 4,
+      "added " + res.added + " / Unit 8 " + Store.scopeStats("unit", "Unit 8").total);
+
+    const L1 = "Unit 8 · Lesson 1", L2 = "Unit 8 · Lesson 2";
+    const n1 = Store.scopeWords("lesson", L1).length, n2 = Store.scopeWords("lesson", L2).length;
+    ok("X2 scopeStats 与 scopeWords 口径一致",
+      Store.scopeStats("lesson", L2).total === n2 && Store.scopeStats("unit", "Unit 8").total === n1 + n2 + Store.scopeWords("lesson", "Unit 8").length,
+      JSON.stringify({ n1: n1, n2: n2, u: Store.scopeStats("unit", "Unit 8").total }));
+    ok("X3 课次统计带状态分布与词表", (() => {
+      const s = Store.scopeStats("lesson", L2);
+      return s.words.length === n2 && s.new === n2 && s.total === s.new + s.learning + s.wrong + s.mastered;
+    })(), JSON.stringify(Store.scopeStats("lesson", L2)));
+
+    // 前置：把 Lesson 2 做到达标，验证删除会连带清掉通关锁定
+    Store.settings.mode = "sequence"; Store.settings.passRatio = 0.5;
+    Store.settings.unitCleared = {};
+    Store.scopeWords("lesson", L2).forEach(w => { w.status = "mastered"; w.srs.correctTypes = ["e2c", "c2e"]; });
+    Store.syncCleared();
+    ok("X4 前置：该课次已达标并写入锁定", !!Store.settings.unitCleared[L2], JSON.stringify(Store.settings.unitCleared));
+    ok("X5 scopeStats 报告已达标", Store.scopeStats("lesson", L2).cleared === true, "");
+
+    const rl = Store.removeScope("lesson", L2);
+    ok("X6 只删该课次的词", rl.removed === n2 && Store.scopeWords("lesson", L2).length === 0, "删 " + rl.removed + " 应 " + n2);
+    ok("X7 同单元其他课次完好", Store.scopeWords("lesson", L1).length === n1 && Store.unitKey(Store.words.find(w => w.word === "zebra")) === "Unit 8", String(Store.scopeWords("lesson", L1).length));
+    ok("X8 通关锁定连带清除", !Store.settings.unitCleared[L2], JSON.stringify(Store.settings.unitCleared));
+    ok("X9 单元仍在（还剩一课）", Store.units().indexOf("Unit 8") >= 0 && Store.scopeStats("unit", "Unit 8").total === n1, String(Store.scopeStats("unit", "Unit 8").total));
+    ok("X10 删空层级是幂等空操作", (() => { const a = Store.removeScope("lesson", L2); return a.removed === 0 && a.ids.length === 0; })(), "");
+
+    const u = Store.undo();
+    ok("X11 撤销把词一并恢复", !!u && Store.scopeWords("lesson", L2).length === n2, Store.scopeWords("lesson", L2).length + "/" + n2);
+    ok("X12 撤销同时恢复通关锁定（否则达标状态永久丢失）", !!Store.settings.unitCleared[L2], JSON.stringify(Store.settings.unitCleared));
+
+    // 整单元删除：连带其下所有课次，且不能碰干扰项扩展池
+    Store.words.push({
+      id: "pool_probe", word: "probe", unit: "Unit 8", lesson: "Lesson 9", pool: true,
+      aliases: ["probe"], key: "probe", senses: [{ pos: "n.", meaning: "探针" }], definition: "n. 探针",
+      status: "new", srs: Lex.freshSrs(), enriched: true,
+    });
+    Store.rebuild();
+    const uTotal = Store.scopeStats("unit", "Unit 8").total;
+    ok("X13 pool 词不计入层级统计", Store.scopeWords("unit", "Unit 8").every(w => !w.pool) && uTotal === n1 + n2,
+      "统计 " + uTotal + " 应 " + (n1 + n2));
+    const totalBeforeUnit = Store.words.length;
+    const ru = Store.removeScope("unit", "Unit 8");
+    ok("X14 整单元删除连带所有课次", ru.removed === n1 + n2 && Store.scopeWords("lesson", L1).length === 0 && Store.scopeWords("lesson", L2).length === 0,
+      "删 " + ru.removed);
+    ok("X15 pool 词不受层级删除波及", !!Store.byId("pool_probe"), "");
+    ok("X16 单元从层级列表中消失", Store.units().indexOf("Unit 8") < 0 && Store.unitFlags().every(u2 => u2.unit !== "Unit 8"), String(Store.units()));
+    ok("X17 兄弟单元一个不少", Store.scopeStats("unit", "Unit 9").total >= 2 && !!Store.words.find(w => w.word === "walnut"), String(Store.scopeStats("unit", "Unit 9").total));
+    ok("X18 折叠状态连带清掉", !(Store.settings.collapsed || {})["Unit 8"] && !(Store.settings.collapsed || {})[L2], JSON.stringify(Store.settings.collapsed));
+    ok("X19 总量减少恰为删除数", Store.words.length === totalBeforeUnit - ru.removed, totalBeforeUnit + "→" + Store.words.length + " 删 " + ru.removed);
+    ok("X19b 池词不进层级视图（幽灵课次会卡死顺序闯关）",
+      Store.blocks().every(b => b.indexOf("Lesson 9") < 0) && Store.unitStats().every(u2 => u2.unit !== "Unit 8"),
+      String(Store.blocks()));
+
+    /* ---------- 顺序线与会话不能留下鬼引用 ---------- */
+    Store.settings.mode = "sequence"; Store.settings.unitCleared = {};
+    Store.words.forEach(w => { if (!w.pool) { w.status = "new"; w.srs = Lex.freshSrs(); } });
+    Quiz.invalidateEligible(); Quiz.reset({ scope: "all", override: null, wrongOnly: false });
+    ok("X20 删掉整单元后顺序线不再指向它", (() => {
+      Store.settings.unitCleared["Unit 9"] = Date.now();
+      Store.settings.unitCleared["Unit 9 · Lesson 1"] = Date.now();
+      Store.removeScope("unit", "Unit 9");
+      const cur = Store.currentBlock();
+      return !String(cur).startsWith("Unit 9") && !Store.settings.unitCleared["Unit 9 · Lesson 1"];
+    })(), String(Store.currentBlock()) + " | " + JSON.stringify(Store.settings.unitCleared));
+
+    const kept = Store.words.filter(w => !w.pool && w.enriched).slice(0, 40);
+    const doomed = kept[0];
+    Quiz.reset({ scope: "all", override: null, wrongOnly: false });
+    Store.settings.mode = "free";
+    const q0 = Quiz.next();
+    ok("X21 前置：正常出题", !!q0.question, JSON.stringify(Object.keys(q0)));
+    Store.removeScope("unit", Store.unitKey(q0.question.word));
+    const touched = Quiz.forgetScope(null);
+    const v = Quiz.view();
+    ok("X22 当前题指向已删词时作废", !v.current && touched > 0, "touched " + touched + " current " + JSON.stringify(v.current));
+    ok("X23 范围/钉住指向已删层级时回退", (() => {
+      Quiz.reset({ scope: "Unit 7", override: "Unit 7 · Lesson 3", wrongOnly: false });
+      const t = Quiz.forgetScope("Unit 7");
+      const w = Quiz.view();
+      return t === 2 && w.scope === "all" && !w.override;
+    })(), JSON.stringify(Quiz.view()));
+    ok("X24 无关层级不受影响", (() => {
+      Quiz.reset({ scope: "Unit 6", override: "Unit 6", wrongOnly: false });
+      const t = Quiz.forgetScope("Unit 5");
+      const w = Quiz.view();
+      Quiz.reset({ scope: "all", override: null });
+      return t === 0 && w.scope === "Unit 6";
+    })(), JSON.stringify(Quiz.view()));
+    ok("X25 题库仍可继续出题（删空不会卡死）", (() => {
+      Quiz.reset({ scope: "all", override: null, wrongOnly: false });
+      const r2 = Quiz.next();
+      return !!(r2.question || r2.empty || r2.done);
+    })(), JSON.stringify(Object.keys(Quiz.next())));
+    void doomed;
+  })();
+
   window.__RESULT__ = R;
 })();
 `;

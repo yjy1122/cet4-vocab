@@ -491,6 +491,30 @@ const Quiz = (() => {
     return session;
   }
   const clearGate = () => { session.pendingGate = null; };
+  /**
+   * 词被删除（单词或整课/整单元）后收敛会话状态，否则会留下鬼题：
+   * 范围指向已消失的层级 → 出题池空；当前题的词对象已不在库里 → 答案无处可写。
+   * pool 词（干扰项扩展池）的 id 本就不在 Store 里，不能误伤。
+   */
+  function forgetScope(label) {
+    let touched = 0;
+    // 删单元时其下课次一并消失：override 存的是 "Unit 1 · Lesson 2"，
+    // 只比 label 相等会漏掉它（测试 X23 抓到过），所以要连 " · " 前缀一起认。
+    const hit = (v) => !!label && (v === label || String(v).startsWith(label + " · "));
+    if (hit(session.scope)) { session.scope = "all"; touched++; }
+    if (hit(session.override)) { session.override = null; touched++; }
+    const cur = session.current;
+    if (cur) {
+      const id = cur.wordId || (cur.word && cur.word.id);
+      if (id && !String(id).startsWith("pool_") && !Store.byId(id)) { session.current = null; touched++; }
+    }
+    if (session.revisit && session.revisit.length) {
+      const keep = session.revisit.filter((id) => String(id).startsWith("pool_") || Store.byId(id));
+      if (keep.length !== session.revisit.length) { session.revisit = keep; touched++; }
+    }
+    if (session.pinId && !Store.byId(session.pinId) && !String(session.pinId).startsWith("pool_")) { session.pinId = null; touched++; }
+    return touched;
+  }
   const view = () => ({ asked: session.asked, right: session.right, acc: session.asked ? Math.round(session.right / session.asked * 100) : null, scope: session.scope, wrongOnly: session.wrongOnly, override: session.override || null, current: session.current });
 
   /* ---------- Mode 3：写作联动（抽 3 个错词） ---------- */
@@ -586,6 +610,6 @@ const Quiz = (() => {
     };
   }
 
-  return { TYPES, eligible, enabledTypes, currentPlan, typesFor, build, next, submit, skip, reset, view, reasonFor, findSurface, shortDef, writingTask, readingTask, analyse, bookmark, invalidateEligible, clearGate, session: () => session };
+  return { TYPES, eligible, enabledTypes, currentPlan, typesFor, build, next, submit, skip, reset, view, reasonFor, findSurface, shortDef, writingTask, readingTask, analyse, bookmark, invalidateEligible, clearGate, forgetScope, session: () => session };
 })();
 if (typeof window !== "undefined") window.Quiz = Quiz;

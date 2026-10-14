@@ -7,6 +7,7 @@ const UI = (() => {
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
   let toastTimer;
+  let libFilter = { kw: "", st: "" };        // 词库当前的搜索/状态筛选，删除确认框用它提示"屏幕显示 M / 实删 N"
   function toast(msg, err) {
     const t = $("#toast");
     t.innerHTML = msg;
@@ -250,6 +251,7 @@ const UI = (() => {
     const kw = ($("#lib-search").value || "").trim().toLowerCase();
     const unit = $("#lib-unit").value;
     const st = $("#lib-status").value;
+    libFilter = { kw, unit, st };
     let list = Store.words.slice();
     if (unit) list = list.filter((w) => Store.unitKey(w) === unit);
     if (st === "unenriched") list = list.filter((w) => !w.enriched);
@@ -266,6 +268,12 @@ const UI = (() => {
     const grouped = Store.settings.libGroup !== false;
     const gbtn = $("#btn-lib-group");
     if (gbtn) gbtn.textContent = grouped ? "▦ 按单元分组" : "☰ 平铺列表";
+    // 单元筛选框选中了具体单元时，工具栏出现"删除该单元"：平铺模式下没有分组头部，这是唯一入口
+    const dub = $("#btn-del-unit");
+    if (dub) {
+      dub.classList.toggle("hidden", !unit);
+      dub.textContent = unit ? `删除「${unit}」(${Store.scopeStats("unit", unit).total})` : "删除该单元";
+    }
 
     if (!list.length) { $("#lib-list").innerHTML = `<div class="empty">没有匹配的词。换个筛选条件，或去「录入」加词。</div>`; return bindLib(); }
     if (!grouped) { $("#lib-list").innerHTML = `<div class="list">${sortList(list).map(wordRow).join("")}</div>`; return bindLib(); }
@@ -302,7 +310,7 @@ const UI = (() => {
             ${b.cleared ? `<span class="tag ok">已达标</span>` : ""}
             ${b.regressed ? `<span class="tag warn">回潮 ${b.wrong}</span>` : ""}
             ${!b.cleared && b.needMore ? `<span class="tag">距达标还差 ${b.needMore}</span>` : ""}
-            <span class="lg-acts"><button data-bact="drill">只练这课</button></span>
+            <span class="lg-acts"><button data-bact="drill">只练这课</button><button data-bact="del" class="danger" title="删除本课全部单词">删除本课</button></span>
           </div>
           ${bOpen ? `<div class="list">${items.map(wordRow).join("")}</div>` : ""}
         </div>`;
@@ -317,6 +325,7 @@ const UI = (() => {
           <div class="ug-acts">
             <button data-uact="drill">只练本单元</button>
             ${u.unenriched ? `<button data-uact="fill">补全 ${u.unenriched} 项</button>` : ""}
+            <button data-uact="del" class="danger" title="删除本单元及其下所有课次的单词">删除单元</button>
           </div>
           <div class="ubar" title="已掌握 ${u.pct}% ｜ 待测 ${u.new}"><i style="width:${u.pct}%"></i></div>
         </header>
@@ -336,11 +345,12 @@ const UI = (() => {
         if (b.dataset.act === "edit") openEditor(w);
         if (b.dataset.act === "reset") { w.srs = Lex.freshSrs(); w.status = "new"; Store.save(); renderLibrary(); renderProgress(); toast(`已重置 <b>${esc(w.word)}</b> 的进度`); }        if (b.dataset.act === "del") {
           if (!confirm(`删除「${w.word}」？
-该词的错题记录与掌握进度会一并删除。删错可用词库上方「撤销上次入库」恢复。`)) return;
+该词的错题记录与掌握进度会一并删除。删错可用词库上方「撤销上次改动」恢复。`)) return;
           Store.snapshot();                       // 删除前打快照，走同一条撤销通道
           Store.remove(id);
+          Quiz.forgetScope(null);                 // 当前题若正是这个单词，必须作废，否则答案写进已删对象
           renderLibrary(); renderProgress(); renderWrongbook(); renderScope(); renderStrip();
-          toast(`已删除 <b>${esc(w.word)}</b>　<span class="tag">点词库上方「撤销上次入库」可恢复</span>`);
+          toast(`已删除 <b>${esc(w.word)}</b>　<span class="tag">点词库上方「撤销上次改动」可恢复</span>`);
         }
       }));
     });
@@ -353,6 +363,7 @@ const UI = (() => {
         Store.setSetting("collapsed", c); renderLibrary();
       } else if (act === "drill") app.focusUnit(unit);
       else if (act === "fill") app.fillUnit(unit);
+      else if (act === "del") askScopeDelete("unit", unit);
     }));
     $$("#lib-list .lghead [data-bact]").forEach((b) => b.addEventListener("click", () => {
       const g = b.closest(".lgroup"); if (!g) return;
@@ -362,6 +373,7 @@ const UI = (() => {
         c[label] = !c[label];
         Store.setSetting("collapsed", c); renderLibrary();
       } else if (act === "drill") app.visitBlock(label);
+      else if (act === "del") askScopeDelete("lesson", label);
     }));
   }
 
@@ -484,7 +496,8 @@ const UI = (() => {
       <div class="row"><button class="ghost danger" id="ed-del">删除该词</button>
         <button class="ghost" id="ed-one">仅此词 AI 补全</button></div>`;
     $("#modal").classList.remove("hidden");
-    $("#ed-del").onclick = () => { if (confirm(`从词库删除「${w.word}」？\n可用词库上方「撤销上次入库」恢复。`)) { Store.snapshot(); Store.remove(w.id); closeModal(); renderLibrary(); renderWrongbook(); renderProgress(); toast("已删除"); } };
+    $("#modal-save").textContent = "保存"; $("#modal-save").classList.remove("danger");
+    $("#ed-del").onclick = () => { if (confirm(`从词库删除「${w.word}」？\n该词的错题记录与掌握进度会一并删除，可用「撤销上次改动」恢复。`)) { Store.snapshot(); Store.remove(w.id); Quiz.forgetScope(null); closeModal(); renderLibrary(); renderWrongbook(); renderProgress(); renderScope(); renderStrip(); toast(`已删除 <b>${esc(w.word)}</b>`); } };
     $("#ed-one").onclick = () => app.aiOne(w);
     $("#modal-save").onclick = () => {
       const senses = Parse.text($("#ed-senses").value.split("\n").map((l) => `${$("#ed-word").value}\t${l}`).join("\n")).candidates[0];
@@ -500,7 +513,57 @@ const UI = (() => {
       closeModal(); renderLibrary(); renderProgress(); renderWrongbook(); toast("已保存");
     };
   }
-  function closeModal() { $("#modal").classList.add("hidden"); }
+  /* ---------- 整课 / 整单元删除 ---------- */
+  /** 当前筛选下该层级里"看得见"的词数：看不见的那些同样会被删，必须在确认框里说清 */
+  function scopeShown(kind, label) {
+    const { kw, unit, st } = libFilter;
+    return Store.scopeWords(kind, label).filter((w) => {
+      if (unit && Store.unitKey(w) !== unit) return false;
+      if (st === "unenriched" && w.enriched) return false;
+      if (st && st !== "unenriched" && w.status !== st) return false;
+      if (kw && !(Lex.norm(w.word).includes(kw) || (w.definition || "").toLowerCase().includes(kw) || (w.aliases || []).some((a) => Lex.norm(a).includes(kw)))) return false;
+      return true;
+    }).length;
+  }
+
+  function askScopeDelete(kind, label) {
+    const s = Store.scopeStats(kind, label);
+    if (!s.total) return toast(`「${esc(label)}」下已经没有单词了`, true);
+    const what = kind === "unit" ? "整个单元" : "整个课次";
+    const shown = scopeShown(kind, label);
+    $("#modal-title").textContent = `删除${kind === "unit" ? "单元" : "课次"} · ${label}`;
+    $("#modal-body").innerHTML = `
+      <p>将删除${what} <b>${esc(label)}</b>，共 <b>${s.total}</b> 个单词：</p>
+      <ul class="del-scope">
+        ${shown < s.total ? `<li class="bad">当前筛选只显示 ${shown} 个，另外 <b>${s.total - shown}</b> 个同样会被删掉</li>` : ""}
+        <li>已掌握 <b>${s.mastered}</b> ｜ 学习中 ${s.learning} ｜ 错题 ${s.wrong} ｜ 待测 ${s.new}</li>
+        ${kind === "unit" && s.lessons.length ? `<li>连带其下 ${s.lessons.length} 个课次：${esc(s.lessons.join("、"))}</li>` : ""}
+        ${s.cleared ? `<li>该${kind === "unit" ? "单元" : "课次"}此前<b>已达标</b>，通关记录一并清除（留着的话日后重导同名课次会被误判为已达标）</li>` : ""}
+        ${s.unenriched ? `<li>其中 ${s.unenriched} 个词还缺音标/例句</li>` : ""}
+        <li class="muted small">${esc(s.words.slice(0, 8).join("、"))}${s.words.length > 8 ? " …" : ""}</li>
+      </ul>
+      <p class="muted small">错题本记录与掌握进度都挂在词条上，随之一并删除。删错可用词库上方「撤销上次改动」一步恢复（只保留最近一次操作）。</p>`;
+    const btn = $("#modal-save");
+    btn.textContent = `删除这 ${s.total} 个词`;
+    btn.classList.add("danger");
+    btn.onclick = () => {
+      const r = Store.removeScope(kind, label);
+      Quiz.forgetScope(label);                    // 当前题/范围可能指向已删的层级
+      // 筛选框若指着已被删空的单元，要一起清掉：否则工具栏会显示「删除「Unit 8」(0)」这种死状态
+      const sel = $("#lib-unit");
+      if (sel && sel.value && !Store.scopeWords("unit", sel.value).length) sel.value = "";
+      $("#modal").classList.add("hidden");
+      renderLibrary(); renderProgress(); renderWrongbook(); renderScope(); renderStrip();
+      toast(`已删除 <b>${esc(label)}</b> 的 ${r.removed} 个词　<span class="tag">点词库上方「撤销上次改动」可恢复</span>`);
+    };
+    $("#modal").classList.remove("hidden");
+  }
+
+  function closeModal() {
+    $("#modal").classList.add("hidden");
+    const btn = $("#modal-save");                 // 还原成编辑弹窗的普通保存按钮
+    btn.textContent = "保存"; btn.classList.remove("danger"); btn.onclick = null;
+  }
 
   /* ---------- 设置抽屉 ---------- */
   function renderTypeChecks() {
@@ -555,6 +618,6 @@ const UI = (() => {
   const SORT_LABEL = { default: "默认", priority: "错题权重", word: "字母" };
   function cycleSort() { libSort = SORTS[(SORTS.indexOf(libSort) + 1) % SORTS.length]; renderLibrary(); return SORT_LABEL[libSort]; }
 
-  return { $, $$, esc, toast, renderProgress, renderMode, renderSeqBar, renderPlanSeg, renderPins, bindPins, renderStrip, showGate, renderQuestion, renderFeedback, renderLibrary, renderPreview, commit, renderWrongbook, renderScope, openEditor, closeModal, fillSettings, renderTypeChecks, speak, emptyStage, TYPE_LABEL, PLAN_LABEL, cycleSort, sortLabel: () => SORT_LABEL[libSort] };
+  return { $, $$, esc, toast, renderProgress, renderMode, renderSeqBar, renderPlanSeg, renderPins, bindPins, renderStrip, showGate, renderQuestion, renderFeedback, renderLibrary, renderPreview, commit, renderWrongbook, renderScope, openEditor, closeModal, askScopeDelete, scopeShown, fillSettings, renderTypeChecks, speak, emptyStage, TYPE_LABEL, PLAN_LABEL, cycleSort, sortLabel: () => SORT_LABEL[libSort] };
 })();
 if (typeof window !== "undefined") window.UI = UI;
