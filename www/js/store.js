@@ -31,6 +31,9 @@ const Store = (() => {
     strictOrder: true,       // 新词严格按书的排列顺序引入
     libGroup: true,          // 词库按单元分组显示
     collapsed: {},           // 已折叠的单元
+    reciteMask: "zh",        // 背诵遮罩：zh 遮中文 | en 遮英文 | off 不遮
+    reciteFilter: "all",     // 背诵筛选：all 全部 | weak 只看不熟 | fresh 没标记的
+    reciteShuffle: false,    // 背诵乱序（避免记住的是位置而不是词）
     types: { e2c: true, c2e: true, cloze: true, poly: true, dictation: true },
     ai: { baseURL: "", model: "", key: "" },
   };
@@ -121,10 +124,11 @@ const Store = (() => {
 
   /* ---------- 统计 ---------- */
   function stats() {
-    const s = { total: state.words.length, new: 0, learning: 0, wrong: 0, mastered: 0, unenriched: 0 };
+    const s = { total: state.words.length, new: 0, learning: 0, wrong: 0, mastered: 0, unenriched: 0, weak: 0 };
     for (const w of state.words) {
       s[w.status] = (s[w.status] || 0) + 1;
       if (!w.enriched) s.unenriched++;
+      if (w.weak) s.weak++;
     }
     return s;
   }
@@ -159,10 +163,11 @@ const Store = (() => {
     const map = new Map();
     for (const w of bookWords()) {
       const k = keyFn(w);
-      if (!map.has(k)) map.set(k, { label: k, unit: k, lesson: "", total: 0, new: 0, learning: 0, wrong: 0, mastered: 0, unenriched: 0, seen: 0, correct: 0 });
+      if (!map.has(k)) map.set(k, { label: k, unit: k, lesson: "", total: 0, new: 0, learning: 0, wrong: 0, mastered: 0, unenriched: 0, weak: 0, seen: 0, correct: 0 });
       const s = map.get(k);
       s.total++; s[w.status] = (s[w.status] || 0) + 1;
       if (!w.enriched) s.unenriched++;
+      if (w.weak) s.weak++;
       s.seen += (w.srs && w.srs.seen) || 0; s.correct += (w.srs && w.srs.correct) || 0;
     }
     const list = [...map.values()];
@@ -207,11 +212,12 @@ const Store = (() => {
     const bf = blockFlags();
     const map = new Map();
     for (const b of bf) {
-      if (!map.has(b.unit)) map.set(b.unit, { label: b.unit, unit: b.unit, total: 0, new: 0, learning: 0, wrong: 0, mastered: 0, unenriched: 0, seen: 0, correct: 0, blocks: [], cleared: true, regressed: false });
+      if (!map.has(b.unit)) map.set(b.unit, { label: b.unit, unit: b.unit, total: 0, new: 0, learning: 0, wrong: 0, mastered: 0, unenriched: 0, weak: 0, seen: 0, correct: 0, blocks: [], cleared: true, regressed: false });
       const s = map.get(b.unit);
       s.blocks.push(b);
       s.total += b.total; s.new += b.new; s.learning += b.learning; s.wrong += b.wrong;
       s.mastered += b.mastered; s.unenriched += b.unenriched; s.seen += b.seen; s.correct += b.correct;
+      s.weak += b.weak;
       if (!b.cleared) s.cleared = false;
       if (b.regressed) s.regressed = true;
     }
@@ -382,12 +388,13 @@ const Store = (() => {
     const c = state.settings.unitCleared || {};
     const s = {
       kind, label, total: list.length, new: 0, learning: 0, wrong: 0, mastered: 0,
-      unenriched: 0, lessons: [], words: list.map((w) => w.word), cleared: false, clearedAt: null,
+      unenriched: 0, weak: 0, lessons: [], words: list.map((w) => w.word), cleared: false, clearedAt: null,
     };
     const ls = new Set();
     for (const w of list) {
       s[w.status] = (s[w.status] || 0) + 1;
       if (!w.enriched) s.unenriched++;
+      if (w.weak) s.weak++;
       if (w.lesson) ls.add(w.lesson);
     }
     s.lessons = [...ls].sort(labelOrder);
@@ -431,6 +438,31 @@ const Store = (() => {
     return { removed: before - state.words.length, ids: [...doomed], clearedFlags };
   }
 
+  /* ---------- 背诵标记：「背不熟」 ---------- */
+  /** 与错题本是两条独立的轴：错题本由测验自动判定，背不熟由你手动标记。
+   *  手动标记不该被测验改写，所以它不碰 status，也不进撤销快照（非破坏性操作）。 */
+  const weakWords = () => bookWords().filter((w) => !!w.weak);
+  const weakCount = () => weakWords().length;
+
+  /** on 省略＝取反；返回新状态，词不存在返回 null */
+  function toggleWeak(id, on) {
+    const w = byId(id);
+    if (!w) return null;
+    const next = on === undefined ? !w.weak : !!on;
+    if (next) { w.weak = true; w.weakAt = Date.now(); } else { delete w.weak; delete w.weakAt; }
+    save();
+    return !!w.weak;
+  }
+
+  /** 清空标记：给 kind+label 时只清该层级（一课/一单元），否则清全部 */
+  function clearWeak(kind, label) {
+    const list = kind && label ? scopeWords(kind, label) : bookWords();
+    let n = 0;
+    for (const w of list) if (w.weak) { delete w.weak; delete w.weakAt; n++; }
+    if (n) save();
+    return n;
+  }
+
   /* ---------- 设置 ---------- */
   function setSetting(k, v) {
     if (k.includes(".")) {
@@ -454,11 +486,20 @@ const Store = (() => {
     const cands = p.words.map((w) => ({
       word: w.word, unit: w.unit, senses: w.senses, definition: w.definition,
       phonetic: w.phonetic, collocation: w.collocation, example_en: w.example_en, example_zh: w.example_zh, note: w.note,
-      srs: w.srs, status: w.status, __progress: true, source: "import",
+      srs: w.srs, status: w.status, weak: !!w.weak, __progress: true, source: "import",
     }));
     // 备份含学习进度：进度更长的以备份为准，本机已练得更多的不被覆盖
     const res = addAll(cands, "merge");
+    /* 「背不熟」是用户手打的标记，不能因为去重把它判成"重复忽略"就丢掉：
+     * 那条路径根本不走合并，词对象原样留着，标记自然回不来。
+     * 所以在导入层按词头补一次 —— 只加不减，重导一份没标记的词表不会把已有标记抹掉。 */
+    for (const w of p.words) {
+      if (!w || !w.weak || !w.word) continue;
+      const hit = indexContext().byAlias.get(Lex.norm(w.word));
+      if (hit && !hit.weak) { hit.weak = true; hit.weakAt = w.weakAt || Date.now(); }
+    }
     if (p.settings) state.settings = { ...state.settings, ...p.settings, ai: { ...state.settings.ai, ...(p.settings.ai || {}) } }, save();
+    save();
     return res;
   }
   function wipe() {
@@ -474,9 +515,11 @@ const Store = (() => {
   return {
     get words() { return state.words; }, get settings() { return state.settings; }, get meta() { return state.meta; },
     load, save, rebuild, indexContext, byId, stats, units, unitStats, unitKey, wordsOf, unitOrder, seed, backfill, plan, addAll, commitPlan,
+    bookWords,                                        // 背诵页要"只背书里的词"，扩展池不该出现在背诵列表
     unitFlags, blockFlags, blockStats, blocks, blockKey, inBlock, wordsOfBlock, resetBlock,
     currentUnit, currentBlock, syncCleared, allCleared, inUnit, gateMet, unclear, resetUnit, labelOrder,
     snapshot, undo, canUndo, update, remove, scopeWords, scopeStats, removeScope, inScope, setSetting, exportJSON, importJSON, isBackup, wipe, usage,
+    weakWords, weakCount, toggleWeak, clearWeak,
     DEFAULT_SETTINGS,
   };
 })();

@@ -40,6 +40,10 @@
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L20 8l-4-4L4 16z"/><path d="M14 6l4 4"/></svg>
     <span>测验</span>
   </button>
+  <button class="tab" data-view="recite">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="7.5" width="12" height="13" rx="2.5"/><path d="M8 4.5h9.5A3 3 0 0 1 20.5 7.5v10"/></svg>
+    <span>背诵</span>
+  </button>
   <button class="tab" data-view="library">
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v18H6.5A2.5 2.5 0 0 1 4 18.5z"/><path d="M8 3v18"/></svg>
     <span>词库</span>
@@ -107,6 +111,28 @@
     </div>
   </section>
 
+  <!-- ============ 背诵（纯记忆：两列表 + 遮罩 + 标记不熟） ============ -->
+  <section class="view" id="view-recite">
+    <div class="rc-bar">
+      <div class="seg seg-scroll" id="rc-mask-seg" role="group" aria-label="遮哪一列"></div>
+      <div class="seg seg-scroll" id="rc-filter-seg" role="group" aria-label="看哪些词"></div>
+      <div class="rc-picks">
+        <select id="rc-unit" title="只看某个单元"></select>
+        <select id="rc-lesson" title="只看某一课"></select>
+      </div>
+      <div class="rc-acts">
+        <button class="ghost" id="rc-all">显示全部</button>
+        <button class="ghost" id="rc-shuffle">🔀 按书序</button>
+        <button class="ghost" id="rc-clear-weak">清除标记</button>
+      </div>
+      <button class="primary" id="rc-drill">标了不熟的词 → 去测验只练这些</button>
+    </div>
+    <div class="rc-summary" id="rc-summary"></div>
+    <div class="rc-table" id="rc-list"></div>
+    <p class="muted small rc-tip">点被遮住的格子＝显示，再点＝遮回。<b>☆</b> 标「背不熟」，标完可在测验里选「只练不熟」。<br>
+      遮罩只是让它看不见，内容仍在这页里（复制、审查元素都拿得到）——考自己刚好，防别人偷看不够。</p>
+  </section>
+
   <!-- ============ 词库 ============ -->
   <section class="view" id="view-library">
     <div class="lib-tools">
@@ -118,6 +144,7 @@
         <option value="learning">学习中</option>
         <option value="wrong">错题</option>
         <option value="mastered">已掌握</option>
+        <option value="weak">背不熟（手动标记）</option>
         <option value="unenriched">缺音标/例句</option>
       </select>
       <button class="ghost" id="btn-lib-sort">排序：默认</button>

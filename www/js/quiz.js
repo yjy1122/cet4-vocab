@@ -134,6 +134,8 @@ const Quiz = (() => {
     }
     if (session.override) return list.filter((w) => matchScope(w, session.override));
     if (session.scope === "unmastered") return list.filter((w) => w.status !== "mastered");
+    // 「背不熟」是背诵页手动标的，标完可以一键只练这些词（走同一套加权与换题型规则）
+    if (session.scope === "weak") return list.filter((w) => w.weak);
     if (session.scope && session.scope !== "all") return list.filter((w) => matchScope(w, session.scope));
     return list;
   }

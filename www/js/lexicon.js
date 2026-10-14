@@ -181,6 +181,8 @@ const Lex = (() => {
     };
     // 备份回灌可携带进度（普通词表导入不含 srs 字段，因此绝不会因导入而改变进度）
     if (cand.__progress && cand.srs) { w.srs = { ...freshSrs(), ...cand.srs }; w.status = cand.status || "new"; }
+    // 「背不熟」是用户手动标记，只在带回进度的通道（备份回灌）里认，普通词表里没这个字段
+    if (cand.__progress && cand.weak) { w.weak = true; w.weakAt = cand.weakAt || Date.now(); }
     return w;
   }
 

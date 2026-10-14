@@ -257,6 +257,19 @@ const app = (() => {
     UI.toast(`出题范围锁定 <b>${UI.esc(unit)}</b>：新词按书序推进，错题在复习配额内插队轮转（点「▶ 继续学习」回到顺序线）`);
   }
 
+  /** 背诵页标完「不熟」→ 一键进测验只练这些词。
+   *  范围切到 free+weak，但判定规则完全不变：仍走同一套加权、冷却与"必须换题型"。 */
+  function drillWeak() {
+    const n = Store.weakCount();
+    if (!n) { UI.toast("还没有标记「背不熟」的词 —— 先在背诵页点几下 ☆", true); return; }
+    Store.setSetting("mode", "free");
+    Quiz.reset({ scope: "weak", override: null, wrongOnly: false });
+    UI.renderMode(); UI.renderScope();
+    switchView("quiz");
+    next();
+    UI.toast(`只练不熟：${n} 个词（出题规则不变，仍会换题型复现错题）`);
+  }
+
   /* ---------------- 滑动切题（左右滑均为下一题；未答先跳过） ---------------- */
   function attachSwipe(el) {
     if (!el || el.dataset.sw) return;
@@ -360,6 +373,7 @@ const app = (() => {
     $$(".tab").forEach((t) => t.classList.toggle("active", t.dataset.view === v));
     $$(".view").forEach((s) => s.classList.toggle("active", s.id === "view-" + v));
     if (v === "library") UI.renderLibrary();
+    if (v === "recite") UI.renderRecite();
     if (v === "wrongbook") UI.renderWrongbook();
     if (v === "advanced") renderWriting();
   }
@@ -388,11 +402,12 @@ const app = (() => {
         UI.renderMode(); UI.renderScope(); next(); return;
       }
       if (Store.settings.mode === "sequence") {
-        if (v === "all" || v === "unmastered") {                 // 顺序模式里点「全部/未掌握」＝切到自由范围
+        const FREE = { all: "全部词库", unmastered: "未掌握", weak: "只练不熟" };
+        if (FREE[v]) {                                            // 顺序模式里点这些＝切到自由范围
           Store.setSetting("mode", "free");
           Quiz.reset({ wrongOnly: false, scope: v, override: null });
           UI.renderMode(); UI.renderScope(); next();
-          UI.toast(`已切换自由模式，范围：<b>${UI.esc(v === "all" ? "全部词库" : "未掌握")}</b>`);
+          UI.toast(`已切换自由模式，范围：<b>${UI.esc(FREE[v])}</b>`);
           return;
         }
         visitUnit(v); return;                                    // 点单元＝回看该单元（顺序线暂停）
@@ -413,6 +428,7 @@ const app = (() => {
       const u = Store.undo();
       if (!u) return UI.toast("没有可撤销的操作（只保留最近一次入库或批量删除）。", true);
       UI.renderProgress(); UI.renderLibrary(); UI.renderWrongbook();
+      if ($("#view-recite").classList.contains("active")) UI.renderRecite();   // 撤销回来的词带着当初的不熟标记
       UI.toast(`已回滚到 ${new Date(u.at).toLocaleTimeString()} 的 ${u.count} 词状态`);
     };
 
@@ -516,6 +532,6 @@ const app = (() => {
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
   else boot();
 
-  return { boot, answer, next, swipeGo, drillWord, aiOne, switchView, focusUnit, fillUnit, continueLearning, visitUnit, visitBlock, backToSequence, setPlan, refreshParsePreview, UI };
+  return { boot, answer, next, swipeGo, drillWord, aiOne, switchView, focusUnit, drillWeak, fillUnit, continueLearning, visitUnit, visitBlock, backToSequence, setPlan, refreshParsePreview, UI };
 })();
 if (typeof window !== "undefined") window.app = app;

@@ -1,5 +1,5 @@
 /* =========================================================================
- * CET-4 词汇引擎 · 浅色主题（App 观感：底部导航 + 卡片 + 安全区适配）
+ * noadic（不止词典）· 浅色主题（App 观感：底部导航 + 卡片 + 安全区适配）
  * ========================================================================= */
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 :root {
@@ -264,6 +264,50 @@ button.primary.danger:hover { background: #b91c1c; }
 .ubar { grid-column: 1 / -1; height: 7px; border-radius: 999px; background: var(--soft); overflow: hidden; border: 1px solid var(--line); }
 .ubar i { display: block; height: 100%; min-width: 3px; background: linear-gradient(90deg, #22c55e, var(--ok)); transition: width .35s; }
 .ugroup > .list { padding: 11px; }
+
+/* ---------- 背诵：两列表 + 遮罩 + 标记不熟 ---------- */
+.rc-bar { display: grid; gap: 8px; margin-bottom: 10px; }
+.rc-picks { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.rc-acts { display: flex; gap: 8px; flex-wrap: wrap; }
+.rc-acts button { flex: 1 1 auto; padding: 9px 10px; font-size: 13px; }
+.rc-acts button.on { color: var(--acc); background: var(--acc-soft); border-color: #c9dbff; font-weight: 700; }
+.rc-summary { font-size: 12.5px; color: var(--mut); margin: 0 0 9px; }
+.rc-summary b { color: var(--txt); font-variant-numeric: tabular-nums; }
+.rc-table { border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; background: var(--card); box-shadow: var(--sh); }
+.rc-head, .rc-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.45fr) 46px; align-items: stretch; }
+.rc-head { background: var(--soft); font-size: 12px; color: var(--mut); font-weight: 700; letter-spacing: .02em; }
+.rc-head span { padding: 9px 10px; }
+.rc-head span + span { border-left: 1px solid var(--line); }
+.rc-head .rc-h-mark { text-align: center; padding: 9px 0; }
+.rc-row { border-top: 1px solid var(--line); background: var(--card); }
+.rc-row.weak { background: var(--bad-soft); }
+.rc-cell {
+  position: relative; display: block; width: 100%; text-align: left; background: none; border: 0; border-radius: 0;
+  border-left: 1px solid var(--line); padding: 11px 11px; font-size: 14px; color: var(--sub);
+  cursor: pointer; min-height: 48px; line-height: 1.5; font-family: inherit;
+}
+.rc-cell.en { border-left: 0; color: var(--txt); }
+.rc-cell b { font-size: 15.5px; font-weight: 800; letter-spacing: -.01em; }
+.rc-ipa { display: block; font-size: 11.5px; color: var(--mut); font-family: ui-monospace, "SF Mono", Consolas, monospace; font-weight: 400; margin-top: 2px; }
+.rc-cell:focus-visible { outline-offset: -2px; }
+/* 遮住的格子：内容整体从可访问性树里消失（不是透明、不是模糊），所以读屏和朗读都不会剧透。
+   格子本身还在原位，点一下才换回来 —— 布局不跳，背的时候手不会滑到别处。 */
+.rc-cell.masked .rc-v { visibility: hidden; }
+.rc-cell.masked { background: repeating-linear-gradient(135deg, #f6f8fc 0 7px, #eaeff7 7px 14px); }
+.rc-cell.masked::after {
+  content: attr(data-hint); position: absolute; inset: 0; display: flex;
+  align-items: center; justify-content: center; font-size: 12px; color: var(--dim); letter-spacing: .04em;
+}
+.rc-row.weak .rc-cell.masked { background: repeating-linear-gradient(135deg, #fdf1f1 0 7px, #f9e4e4 7px 14px); }
+.rc-mark {
+  background: none; border: 0; border-left: 1px solid var(--line); color: var(--line2);
+  font-size: 20px; line-height: 1; cursor: pointer; padding: 0; min-height: 48px;
+}
+.rc-mark:active { transform: scale(.88); }
+.rc-row.weak .rc-mark { color: var(--bad); }
+/* 标了不熟、但测验里已经用 2 种题型答对 → 星变绿，提示这颗可以摘了 */
+.rc-row.weak .rc-mark.ready { color: var(--ok); }
+.rc-tip { margin: 10px 2px 0; }
 
 /* ---------- 抽屉 / 弹窗 ---------- */
 .drawer-mask, .modal { position: fixed; inset: 0; background: rgba(15,23,42,.42); z-index: 60; backdrop-filter: blur(2px); }

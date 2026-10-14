@@ -33,16 +33,16 @@ const UI = (() => {
 
   function renderScope() {
     const seg = $("#scope-seg");
-    const units = ["all", ...Store.units(), "wrong", "unmastered"];
+    const units = ["all", ...Store.units(), "wrong", "unmastered", "weak"];
     const v = Quiz.view();
-    const labels = { all: "全部词库", wrong: "专练错题", unmastered: "未掌握" };
+    const labels = { all: "全部词库", wrong: "专练错题", unmastered: "未掌握", weak: "只练不熟" };
     const stat = {}; Store.unitStats().forEach((g) => { stat[g.unit] = g; });
     const all = Store.stats();
     const seq = Store.settings.mode === "sequence";
     const active = v.wrongOnly ? "wrong" : (seq ? (v.override || Store.currentUnit()) : v.scope);
     seg.innerHTML = units.map((u) => {
       const on = u === active;
-      const n = u === "all" ? all.total : u === "wrong" ? all.wrong : u === "unmastered" ? Store.words.filter((w) => w.status !== "mastered").length : (stat[u] ? stat[u].total : 0);
+      const n = u === "all" ? all.total : u === "wrong" ? all.wrong : u === "unmastered" ? Store.words.filter((w) => w.status !== "mastered").length : u === "weak" ? all.weak : (stat[u] ? stat[u].total : 0);
       const done = stat[u] ? `<span class="muted"> 掌握${stat[u].mastered}</span>` : "";
       return `<button data-scope="${esc(u)}" class="${on ? "on" : ""}">${esc(labels[u] || u)} <span class="muted">${n}</span>${done}</button>`;
     }).join("");
@@ -236,8 +236,8 @@ const UI = (() => {
         ${w.srs.wrongReason && w.status === "wrong" ? `<div class="meta" style="color:var(--bad)">错因：${esc(w.srs.wrongReason)}</div>` : ""}
       </div>
       <div class="acts">
-        <span class="tag ${s[1]}">${s[0]}</span>
-        <button data-act="speak" title="朗读">🔊</button><button data-act="edit">编辑</button><button data-act="reset">重置</button><button data-act="del" class="danger">删除</button>
+        <span class="tag ${s[1]}">${s[0]}</span>${w.weak ? `<span class="tag bad" title="背诵页标记的「背不熟」">不熟</span>` : ""}
+        <button data-act="speak" title="朗读">🔊</button><button data-act="weak" title="标记为背不熟（背诵页用）">${w.weak ? "取消不熟" : "背不熟"}</button><button data-act="edit">编辑</button><button data-act="reset">重置</button><button data-act="del" class="danger">删除</button>
       </div></div>`;
   }
 
@@ -267,6 +267,7 @@ const UI = (() => {
     let list = Store.words.slice();
     if (unit) list = list.filter((w) => Store.unitKey(w) === unit);
     if (st === "unenriched") list = list.filter((w) => !w.enriched);
+    else if (st === "weak") list = list.filter((w) => w.weak);
     else if (st) list = list.filter((w) => w.status === st);
     if (kw) list = list.filter((w) => Lex.norm(w.word).includes(kw) || w.definition.toLowerCase().includes(kw) || (w.aliases || []).some((a) => Lex.norm(a).includes(kw)));
 
@@ -355,6 +356,12 @@ const UI = (() => {
         const w = Store.byId(id);
         if (b.dataset.act === "speak") speak(w.word);
         if (b.dataset.act === "edit") openEditor(w);
+        if (b.dataset.act === "weak") {
+          const on = Store.toggleWeak(id);
+          renderLibrary(); renderProgress();
+          if ($("#view-recite").classList.contains("active")) renderRecite();
+          toast(on ? `已标记 <b>${esc(w.word)}</b> 背不熟　<span class="tag">背诵页可只看这些</span>` : `已取消 <b>${esc(w.word)}</b> 的不熟标记`);
+        }
         if (b.dataset.act === "reset") { w.srs = Lex.freshSrs(); w.status = "new"; Store.save(); renderLibrary(); renderProgress(); toast(`已重置 <b>${esc(w.word)}</b> 的进度`); }        if (b.dataset.act === "del") {
           if (!confirm(`删除「${w.word}」？
 该词的错题记录与掌握进度会一并删除。删错可用词库上方「撤销上次改动」恢复。`)) return;
@@ -388,6 +395,183 @@ const UI = (() => {
       else if (act === "del") askScopeDelete("lesson", label);
     }));
   }
+
+  /* ---------- 背诵（纯记忆视图：两列表 + 遮罩 + 手动标记不熟） ---------- */
+  const MASK_LABEL = { zh: "遮中文", en: "遮英文", off: "不遮" };
+  const RF_LABEL = { all: "全部", weak: "只看不熟", fresh: "没标记的" };
+  let rcShown = new Set();          // 被单独点开的那些格子（瞬态，不持久化）
+  let rcAll = false;                // 「显示全部」总开关
+  let rcOrder = { sig: "", ids: [] };
+
+  /** 乱序要稳定：
+   *  ① 标记一个词之后整页不能重排，否则手指会跟着跳；
+   *  ② 在「全部 / 只看不熟 / 没标记的」之间来回切，剩下的词顺序不能变 —— 不然背到一半位置全乱。
+   *  所以顺序只跟"这一组（未筛选）有哪些词"绑定，sig 用排序后的 id 集合，与筛选无关。 */
+  function reciteOrder(scopeIds, page) {
+    if (!Store.settings.reciteShuffle) return page.slice();
+    const sig = scopeIds.slice().sort().join("|");
+    if (rcOrder.sig !== sig) {
+      const a = scopeIds.slice();
+      for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = a[i]; a[i] = a[j]; a[j] = t; }
+      rcOrder = { sig, ids: a };
+    }
+    const pos = new Map(rcOrder.ids.map((id, i) => [id, i]));
+    return page.slice().sort((x, y) => (pos.has(x.id) ? pos.get(x.id) : 1e9) - (pos.has(y.id) ? pos.get(y.id) : 1e9));
+  }
+
+  /** 当前背诵页选中的那一组（不含"只看不熟"这层筛选） */
+  function rcScopeWords() {
+    const u = $("#rc-unit") ? $("#rc-unit").value : "", l = $("#rc-lesson") ? $("#rc-lesson").value : "";
+    return Store.bookWords().filter((w) => (!u || Store.unitKey(w) === u) && (!l || Store.blockKey(w) === l));
+  }
+
+  /** 格子内容永远包在 .rc-v 里：遮罩只是给按钮加个 class，靠 CSS 隐掉。
+   *  不重绘 innerHTML，也就没有"重新转义一次已存内容"的二次注入面。 */
+  const rcInner = (kind, w) => kind === "en"
+    ? `<b>${esc(w.word)}</b>${w.phonetic ? `<span class="rc-ipa">${esc(w.phonetic)}</span>` : ""}`
+    : `<span class="rc-def">${esc(w.definition || "（无释义）")}</span>`;
+  const rcMasked = (kind) => !rcAll && (Store.settings.reciteMask || "zh") === kind;
+  function rcCell(kind, w, id) {
+    const m = rcMasked(kind) && !rcShown.has(id + ":" + kind);
+    return `<button type="button" class="rc-cell ${kind}${m ? " masked" : ""}" data-cell="${kind}" data-hint="点击显示"
+      title="${m ? "点击显示" : "点击遮回"}"><span class="rc-v">${rcInner(kind, w)}</span></button>`;
+  }
+
+  /** 只重写计数条与筛选按钮上的数字：列表本身不动，滚动位置就不会被甩回顶部 */
+  function syncReciteMeta(page) {
+    const list = rcScopeWords();
+    const weakN = list.filter((w) => w.weak).length;
+    const readyN = list.filter((w) => w.weak && w.status === "mastered").length;
+    const u = $("#rc-unit"), l = $("#rc-lesson");
+    const scopeTxt = (l && l.value) || (u && u.value) || "全部词库";
+    const mask = Store.settings.reciteMask || "zh";
+    const sum = $("#rc-summary");
+    if (sum) sum.innerHTML = `<b>${esc(scopeTxt)}</b> 共 ${list.length} 词 ｜ 标了不熟 <b>${weakN}</b> 个 ｜ 本页 ${page} 个`
+      + (mask === "off" || rcAll ? `　<span class="tag">当前不遮罩</span>` : `　<span class="tag acc">${MASK_LABEL[mask]}（点格子显示）</span>`)
+      + (readyN ? `　<span class="tag ok">${readyN} 个测验已答对达标 → 星是绿的，可以摘了</span>` : "")
+      + (Store.settings.reciteShuffle ? `　<span class="tag warn">乱序</span>` : "");
+    const chips = { all: list.length, weak: weakN, fresh: list.length - weakN };
+    Object.keys(chips).forEach((k) => {
+      const b = $(`#rc-filter-seg [data-rf="${k}"]`);
+      if (b) b.innerHTML = `${RF_LABEL[k]}<span class="muted"> ${chips[k]}</span>`;
+    });
+  }
+
+  function renderRecite() {
+    const uSel = $("#rc-unit"), lSel = $("#rc-lesson");
+    if (!uSel || !lSel) return;
+    const unit = uSel.value, lesson = lSel.value;
+    const mask = Store.settings.reciteMask || "zh";
+    const rf = Store.settings.reciteFilter || "all";
+
+    const us = Store.units(), uSig = us.join("|");
+    if (uSel.dataset.sig !== uSig) {
+      uSel.innerHTML = `<option value="">全部单元</option>` + us.map((u) => `<option value="${esc(u)}">${esc(u)}</option>`).join("");
+      uSel.dataset.sig = uSig;
+    }
+    uSel.value = us.indexOf(unit) >= 0 ? unit : "";
+    const bl = Store.blockFlags().filter((b) => b.lesson && (!uSel.value || b.unit === uSel.value));
+    const bSig = bl.map((b) => b.label).join("|");
+    if (lSel.dataset.sig !== bSig) {
+      lSel.innerHTML = `<option value="">整单元（不分课次）</option>` + bl.map((b) => `<option value="${esc(b.label)}">${esc(b.lesson)}</option>`).join("");
+      lSel.dataset.sig = bSig;
+    }
+    lSel.value = bl.some((b) => b.label === lesson) ? lesson : "";
+
+    const scope = rcScopeWords();
+    const weakN = scope.filter((w) => w.weak).length;
+    let list = scope;
+    if (rf === "weak") list = scope.filter((w) => w.weak);
+    else if (rf === "fresh") list = scope.filter((w) => !w.weak);
+    const rows = reciteOrder(scope.map((w) => w.id), list);
+
+    $("#rc-mask-seg").innerHTML = Object.keys(MASK_LABEL).map((k) =>
+      `<button data-mask="${k}" class="${k === mask ? "on" : ""}">${MASK_LABEL[k]}</button>`).join("");
+    $("#rc-filter-seg").innerHTML = Object.keys(RF_LABEL).map((k) => {
+      const n = k === "all" ? scope.length : k === "weak" ? weakN : scope.length - weakN;
+      return `<button data-rf="${k}" class="${k === rf ? "on" : ""}">${RF_LABEL[k]}<span class="muted"> ${n}</span></button>`;
+    }).join("");
+    const sbtn = $("#rc-shuffle");
+    if (sbtn) { sbtn.classList.toggle("on", !!Store.settings.reciteShuffle); sbtn.textContent = Store.settings.reciteShuffle ? "🔀 乱序中" : "🔀 按书序"; }
+    const abtn = $("#rc-all");
+    if (abtn) abtn.textContent = rcAll ? "全部遮回" : "显示全部";
+
+    $("#rc-list").innerHTML = rows.length ? `<div class="rc-head"><span>英文单词</span><span>词性及中文释义</span><span class="rc-h-mark">不熟</span></div>`
+      + rows.map((w) => {
+          const ready = !!w.weak && w.status === "mastered";
+          return `<div class="rc-row${w.weak ? " weak" : ""}" data-id="${w.id}">
+          ${rcCell("en", w, w.id)}${rcCell("zh", w, w.id)}
+          <button type="button" class="rc-mark${ready ? " ready" : ""}" title="${ready ? "已标不熟，但测验里已用 2 种题型答对 —— 点一下摘掉标记" : w.weak ? "取消标记" : "标记为背不熟"}">${w.weak ? "★" : "☆"}</button>
+        </div>`;
+        }).join("")
+      : `<div class="empty">${scope.length ? "这一筛没有词了 —— 切回「全部」看看。" : "这里还没有可背的单词，去「录入」贴一份词表。"}</div>`;
+    syncReciteMeta(rows.length);
+    bindRecite();
+  }
+
+  function bindRecite() {
+    const us = $("#rc-unit"), ls = $("#rc-lesson");
+    if (us) us.onchange = renderRecite;
+    if (ls) ls.onchange = renderRecite;
+    $$("#rc-mask-seg [data-mask]").forEach((b) => b.onclick = () => {
+      Store.setSetting("reciteMask", b.dataset.mask);
+      rcShown = new Set(); rcAll = false;          // 换遮法＝换一轮，之前点开的收回去
+      renderRecite();
+    });
+    $$("#rc-filter-seg [data-rf]").forEach((b) => b.onclick = () => {
+      Store.setSetting("reciteFilter", b.dataset.rf);
+      renderRecite();
+    });
+    const sb = $("#rc-shuffle");
+    if (sb) sb.onclick = () => {
+      Store.setSetting("reciteShuffle", !Store.settings.reciteShuffle);
+      rcOrder = { sig: "", ids: [] };
+      renderRecite();
+      toast(Store.settings.reciteShuffle ? "已乱序：记住的是词，不是位置" : "已回到书序");
+    };
+    const ab = $("#rc-all");
+    if (ab) ab.onclick = () => { rcAll = !rcAll; if (!rcAll) rcShown = new Set(); renderRecite(); };
+    const cw = $("#rc-clear-weak");
+    if (cw) cw.onclick = () => {
+      const u = $("#rc-unit").value, l = $("#rc-lesson").value;
+      const n = Store.clearWeak(l ? "lesson" : u ? "unit" : null, l || u || null);
+      renderRecite(); renderLibrary(); renderProgress();
+      toast(n ? `已清除 ${n} 个「背不熟」标记` : "这一组本来就没有标记", !n);
+    };
+    const dr = $("#rc-drill");
+    if (dr) dr.onclick = () => app.drillWeak();
+    $$("#rc-list .rc-cell").forEach((c) => c.onclick = () => {
+      const row = c.closest(".rc-row"); if (!row) return;
+      const kind = c.dataset.cell, k = row.dataset.id + ":" + kind;
+      if (rcShown.has(k)) rcShown.delete(k); else rcShown.add(k);
+      const m = rcMasked(kind) && !rcShown.has(k);
+      c.classList.toggle("masked", m);
+      c.title = m ? "点击显示" : "点击遮回";
+    });
+    $$("#rc-list .rc-mark").forEach((b) => b.onclick = () => {
+      const row = b.closest(".rc-row"); if (!row) return;
+      const w = Store.byId(row.dataset.id); if (!w) return;
+      const on = Store.toggleWeak(w.id);
+      row.classList.toggle("weak", on);
+      b.classList.toggle("ready", on && w.status === "mastered");
+      b.textContent = on ? "★" : "☆";
+      b.title = on && w.status === "mastered" ? "已标不熟，但测验里已用 2 种题型答对 —— 点一下摘掉标记"
+        : on ? "取消标记" : "标记为背不熟";
+      syncReciteMeta($$("#rc-list .rc-row").length);
+      renderProgress();
+      // 「只看不熟」里取消标记 / 「没标记的」里打上标记，这一行当场就不该再出现。
+      // 只摘掉这一行，不整页重绘 —— 重绘会把滚动位置甩回顶部。
+      const rf = Store.settings.reciteFilter;
+      if ((rf === "weak" && !on) || (rf === "fresh" && on)) {
+        const n = $$("#rc-list .rc-row").length - 1;
+        row.remove();
+        syncReciteMeta(Math.max(0, n));
+        if (!n) renderRecite();                     // 空掉了要补上"这一筛没有词了"的提示
+      }
+      if ($("#view-library").classList.contains("active")) renderLibrary();
+    });
+  }
+
 
   /* ---------- 导入归属选择器（Unit / Lesson 可自动识别或手动钉住） ---------- */
   function renderPins() {
@@ -532,7 +716,8 @@ const UI = (() => {
     return Store.scopeWords(kind, label).filter((w) => {
       if (unit && Store.unitKey(w) !== unit) return false;
       if (st === "unenriched" && w.enriched) return false;
-      if (st && st !== "unenriched" && w.status !== st) return false;
+      if (st === "weak" && !w.weak) return false;
+      if (st && st !== "unenriched" && st !== "weak" && w.status !== st) return false;
       if (kw && !(Lex.norm(w.word).includes(kw) || (w.definition || "").toLowerCase().includes(kw) || (w.aliases || []).some((a) => Lex.norm(a).includes(kw)))) return false;
       return true;
     }).length;
@@ -552,6 +737,7 @@ const UI = (() => {
         ${kind === "unit" && s.lessons.length ? `<li>连带其下 ${s.lessons.length} 个课次：${esc(s.lessons.join("、"))}</li>` : ""}
         ${s.cleared ? `<li>该${kind === "unit" ? "单元" : "课次"}此前<b>已达标</b>，通关记录一并清除（留着的话日后重导同名课次会被误判为已达标）</li>` : ""}
         ${s.unenriched ? `<li>其中 ${s.unenriched} 个词还缺音标/例句</li>` : ""}
+        ${s.weak ? `<li>其中 <b>${s.weak}</b> 个被你标了「背不熟」</li>` : ""}
         <li class="muted small">${esc(s.words.slice(0, 8).join("、"))}${s.words.length > 8 ? " …" : ""}</li>
       </ul>
       <p class="muted small">错题本记录与掌握进度都挂在词条上，随之一并删除。删错可用词库上方「撤销上次改动」一步恢复（只保留最近一次操作）。</p>`;
@@ -630,6 +816,6 @@ const UI = (() => {
   const SORT_LABEL = { default: "默认", priority: "错题权重", word: "字母" };
   function cycleSort() { libSort = SORTS[(SORTS.indexOf(libSort) + 1) % SORTS.length]; renderLibrary(); return SORT_LABEL[libSort]; }
 
-  return { $, $$, esc, toast, renderProgress, renderMode, renderSeqBar, renderPlanSeg, renderPins, bindPins, renderStrip, showGate, renderQuestion, renderFeedback, renderLibrary, renderPreview, commit, renderWrongbook, renderScope, openEditor, closeModal, askScopeDelete, scopeShown, fillSettings, renderTypeChecks, speak, emptyStage, TYPE_LABEL, PLAN_LABEL, cycleSort, sortLabel: () => SORT_LABEL[libSort] };
+  return { $, $$, esc, toast, renderProgress, renderMode, renderSeqBar, renderPlanSeg, renderPins, bindPins, renderStrip, showGate, renderQuestion, renderFeedback, renderLibrary, renderRecite, bindRecite, renderPreview, commit, renderWrongbook, renderScope, openEditor, closeModal, askScopeDelete, scopeShown, fillSettings, renderTypeChecks, speak, emptyStage, TYPE_LABEL, PLAN_LABEL, cycleSort, sortLabel: () => SORT_LABEL[libSort] };
 })();
 if (typeof window !== "undefined") window.UI = UI;
