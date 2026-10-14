@@ -143,8 +143,8 @@ console.log("[3/4] 断言");
 let all = allText(xml);
 ok("D1 顶栏词数与播种一致（127）", /127 词 ｜ 已补全 127/.test(all), (all.match(/\d+ 词 ｜ 已补全 \d+/) || ["无"])[0]);
 ok("D2 品牌已是 noadic / 不止词典", all.includes("noadic") && all.includes("不止词典"), "");
-ok("D3 底部五个导航项", ["测验", "词库", "录入", "错题本", "进阶"].every((t) => all.includes(t)),
-  ["测验", "词库", "录入", "错题本", "进阶"].filter((t) => !all.includes(t)).join(",") || "全在");
+ok("D3 底部六个导航项", ["测验", "背诵", "词库", "录入", "错题本", "进阶"].every((t) => all.includes(t)),
+  ["测验", "背诵", "词库", "录入", "错题本", "进阶"].filter((t) => !all.includes(t)).join(",") || "全在");
 ok("D4 顺序闯关条显示当前块与达标进度", /Unit \d+.*已掌握.*混合轮换/.test(all.replace(/\|/g, "")),
   (all.match(/Unit \d+[^|]{0,40}/) || ["无"])[0]);
 
@@ -233,6 +233,95 @@ const all2 = allText(dump());
 ok("D14 再点一次不会破坏数据，并明确告知没有可撤销记录",
   /127 词 ｜ 已补全 127/.test(all2) && /没有可撤销/.test(all2),
   (all2.match(/\d+ 词 ｜ 已补全 \d+/) || ["无"])[0] + " | toast: " + ((all2.match(/[^|]*没有可撤销[^|]*/) || ["无"])[0]).trim());
+
+/* ---------- 背诵页：遮罩与标记（D15–D19） ----------
+ * 遮罩用 visibility:hidden 实现，被遮的文字会**从无障碍树里消失**，
+ * 所以这里能拿到一条行为级断言，而不是"看起来像遮住了"。 */
+if (!tapText("背诵", "背诵")) die("无法进入背诵页");
+await sleep(1300);
+xml = dump(); all = allText(xml);
+ok("D15 背诵页是两列表（英文单词 / 词性及中文释义）", all.includes("英文单词") && all.includes("词性及中文释义"), all.slice(0, 100));
+
+/** 计数条是一个**合并文本节点**："全部词库 共 127 词 ｜ 标了不熟 1 个 ｜ 本页 1 个　当前不遮罩"。
+ *  所以必须锚在 rc-summary 这个 resource-id 上，不能"找含标签的节点"——
+ *  工具栏里那个「标了不熟的词 → 去测验只练这些」按钮也含"标了不熟"，而且排在它前面。 */
+const sumNode = (xml) => nodes(xml).find((n) => /rc-summary$/.test(n.id || "")) || null;
+function numInSummary(xml, label) {
+  const n = sumNode(xml);
+  if (!n) return null;
+  const m = new RegExp(label + "\\s*(\\d+)").exec(n.text || "");
+  return m ? +m[1] : null;
+}
+/** 第一行（英文, 中文）探针对。
+ *  ① 必须锚在表头下方：顶栏的 noadic 也是纯小写英文，它右边那行正是 "127 词 ｜ 已补全…"；
+ *  ② 英文格子的节点文字是「词 + 音标」合并串（"observe əbˈzɜːv"），整串 ^[a-z]+$ 匹配不上，
+ *     只能取开头的词。 */
+function firstPair(xml) {
+  const ns = nodes(xml);
+  const head = ns.find((n) => (n.text || "").trim() === "英文单词");
+  if (!head) return null;
+  const texts = ns.map((n) => n.text).filter(Boolean);
+  for (const e of ns.filter((n) => n.y > head.y)) {
+    const wm = /^([a-z][a-z-]{3,})(\s|$)/.exec(e.text || "");
+    if (!wm) continue;
+    const c = ns.find((n) => /[一-龥]/.test(n.text || "") && n.x > e.x + 10 && Math.abs(n.y - e.y) <= 24
+      && n.text.length >= 4 && !/不止词典|遮罩|不熟|本页|单元|课次|全部|词库|掌握|错题|待测|点击显示/.test(n.text));
+    // 探针必须在全页唯一：① 不能有第二个一模一样的节点（两个词都写"保护"，遮住第一行、
+    // 第二行还在，会把"遮住了"判成"没遮住"）；② 也不能是别的节点文字的一部分
+    // （"保护；保留"里就含着"保护"）。
+    if (!c) continue;
+    const dup = texts.filter((t) => t === c.text).length !== 1;
+    const nested = texts.filter((t) => t !== c.text && t.includes(c.text)).length;
+    if (!dup && !nested) return { en: wm[1], zh: c.text };
+  }
+  return null;
+}
+
+/* 先「不遮」，取第一行的中文释义作为探针 */
+tapText("全部", "全部筛选");            // 建立已知状态：上一轮可能把筛选留在「只看不熟」
+await sleep(900);
+if (!tapText("不遮", "不遮")) die("点不到「不遮」");
+await sleep(1100);
+xml = dump();
+const pair = firstPair(xml);
+if (!pair) {
+  ok("D16 遮中文后该释义从无障碍树里消失", false, "没取到第一行的中英探针对，无法判断遮罩是否生效");
+  ok("D17 「显示全部」把整页中文放回来", false, "同上：探针缺失");
+} else {
+  ok("D16a 不遮时中文释义在树里（探针 " + pair.en + "）", allText(xml).includes(pair.zh), pair.zh);
+  if (!tapText("遮中文", "遮中文")) die("点不到「遮中文」");
+  await sleep(1100);
+  const afterMask = allText(dump());
+  ok("D16 遮中文后该释义真的从无障碍树消失（不是透明、不是模糊）", !afterMask.includes(pair.zh),
+    "探针「" + pair.zh + "」" + (afterMask.includes(pair.zh) ? "仍在树里=遮罩没生效" : "已消失"));
+  if (!tapText("显示全部", "显示全部")) die("点不到「显示全部」");
+  await sleep(1100);
+  ok("D17 「显示全部」把整页中文放回来", allText(dump()).includes(pair.zh), "探针「" + pair.zh + "」没回来");
+  if (!tapText("全部遮回", "全部遮回")) die("点不到「全部遮回」");
+  await sleep(1000);
+  ok("D17b 「全部遮回」再遮回去", !allText(dump()).includes(pair.zh), "探针又可见了=遮回没生效");
+}
+
+/* 标记不熟：点第一行的 ☆，看计数条与筛选计数 */
+const star0 = numInSummary(dump(), "标了不熟");
+if (!tapText("☆", "☆ 标记不熟")) {
+  ok("D18 点 ☆ 标记背不熟并同步计数", false, "找不到 ☆ 节点");
+} else {
+  await sleep(1100);
+  const xml2 = dump();
+  const star1 = numInSummary(xml2, "标了不熟");
+  ok("D18 点 ☆ 标记背不熟并同步计数", star0 != null && star1 === star0 + 1 && allText(xml2).includes("★"),
+    "标前 " + star0 + " → 标后 " + star1);
+  if (!tapText("只看不熟", "只看不熟")) die("点不到「只看不熟」筛选");
+  await sleep(1100);
+  const xml3 = dump();
+  ok("D19 「只看不熟」筛到只剩标记过的那些", numInSummary(xml3, "本页") === 1 && allText(xml3).includes("★"),
+    "本页 " + numInSummary(xml3, "本页") + " 个");
+  shot("recite-weak");
+  if (!tapText("全部", "全部")) die("点不回「全部」筛选");
+  await sleep(900);
+}
+shot("recite");
 
 if (SELFTEST) R.push({ name: "Z. SELFTEST 负向对照（本应失败）", pass: false, extra: "故意写错" });
 

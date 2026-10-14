@@ -793,6 +793,145 @@ const TEST = String.raw`
       Store.words.length + "/" + before);
   })();
 
+  /* ---------- Z 背诵：遮罩数据面 + 「背不熟」手动标记 ---------- */
+  (function () {
+    Store.wipe();
+    Store.settings.mode = "free";
+    const mk = (word, unit, lesson, meaning) => ({
+      word, unit, lesson, senses: [{ pos: "v.", meaning }], definition: "v. " + meaning,
+      phonetic: "/əˈbɜːv/", example_en: "We " + word + " the stars.", example_zh: "我们观测星星。",
+    });
+    Store.addAll([
+      mk("observe", "Unit 21", "Lesson 1", "观察"), mk("reserve", "Unit 21", "Lesson 1", "保留"),
+      mk("deserve", "Unit 21", "Lesson 2", "值得"), mk("preserve", "Unit 22", "Lesson 1", "保护"),
+    ], "merge", { silent: true });
+    Store.rebuild(); Store.save();
+    const W = (wd) => Store.words.find((w) => w.word === wd);
+    ok("Z0 前置：4 词 / 2 单元 / 3 课次", Store.words.length === 4 && Store.units().length === 2 && Store.blocks().length === 3,
+      Store.words.length + "/" + String(Store.units()) + "/" + String(Store.blocks()));
+
+    ok("Z1 标记生效并记下时间", (() => {
+      const r = Store.toggleWeak(W("observe").id);
+      const w = W("observe");
+      return r === true && w.weak === true && w.weakAt > 0;
+    })(), JSON.stringify(W("observe").weak));
+    ok("Z2 再点取消：字段彻底删掉，不留 weak:false 垃圾", (() => {
+      Store.toggleWeak(W("observe").id);
+      const w = W("observe");
+      return w.weak === undefined && !("weak" in w) && !("weakAt" in w);
+    })(), JSON.stringify(W("observe")));
+    Store.toggleWeak(W("observe").id, true);
+    Store.toggleWeak(W("deserve").id, true);
+    ok("Z3 显式传值可强制置位（幂等）", W("observe").weak === true && W("deserve").weak === true && Store.weakCount() === 2,
+      String(Store.weakCount()));
+    ok("Z4 stats().weak 与 weakCount/实数三者一致",
+      Store.stats().weak === Store.weakCount() && Store.stats().weak === Store.words.filter((w) => w.weak).length,
+      JSON.stringify([Store.stats().weak, Store.weakCount()]));
+    ok("Z5 标记不碰 status（背诵的轴不能污染测验判定）", W("observe").status === "new" && W("deserve").status === "new",
+      W("observe").status + "/" + W("deserve").status);
+    ok("Z6 标记不进撤销快照（非破坏性操作不该吃掉「撤销上次改动」）", (() => {
+      const before = Store.canUndo();
+      Store.toggleWeak(W("reserve").id, true);
+      Store.toggleWeak(W("reserve").id, false);
+      return before === Store.canUndo();
+    })(), String(Store.canUndo()));
+    Store.words.push({
+      id: "pool_z", word: "conservative", unit: "Unit 21", lesson: "Lesson 1", pool: true,
+      aliases: ["conservative"], key: "conservative", senses: [{ pos: "adj.", meaning: "保守的" }],
+      definition: "adj. 保守的", status: "new", srs: Lex.freshSrs(), enriched: true,
+    });
+    Store.rebuild();
+    ok("Z7 bookWords() 不含扩展池词（背诵列表只背书里有的）",
+      Store.bookWords().length === 4 && !Store.bookWords().some((w) => w.pool), String(Store.bookWords().length));
+    ok("Z8 池词即便被标了也不进背诵列表（bookWords 一挡，weakWords 就看不见它）", (() => {
+      Store.toggleWeak("pool_z", true);
+      return W("conservative").weak === true && !Store.weakWords().some((w) => w.pool)
+        && !Store.bookWords().some((w) => w.id === "pool_z");
+    })(), JSON.stringify(Store.weakWords().map((w) => w.word)));
+    ok("Z9 层级统计带 weak 且课次加和＝单元加和", (() => {
+      const bs = Store.blockStats(), us = Store.unitStats();
+      const u21 = us.find((u) => u.unit === "Unit 21");
+      const sum21 = bs.filter((b) => b.unit === "Unit 21").reduce((n, b) => n + b.weak, 0);
+      return u21.weak === 2 && sum21 === u21.weak && Store.unitFlags().find((u) => u.unit === "Unit 21").weak === 2;
+    })(), JSON.stringify(Store.unitStats().map((u) => [u.unit, u.weak])));
+    ok("Z10 删除确认框能看到「其中几个标了不熟」", Store.scopeStats("unit", "Unit 21").weak === 2
+      && Store.scopeStats("lesson", "Unit 21 · Lesson 2").weak === 1
+      && Store.scopeStats("lesson", "Unit 22 · Lesson 1").weak === 0,
+      JSON.stringify([Store.scopeStats("unit", "Unit 21").weak, Store.scopeStats("lesson", "Unit 21 · Lesson 2").weak]));
+    ok("Z11 clearWeak 按课次只清那一课，且不动池词", (() => {
+      const n = Store.clearWeak("lesson", "Unit 21 · Lesson 1");
+      return n === 1 && W("observe").weak === undefined && W("deserve").weak === true && W("conservative").weak === true;
+    })(), JSON.stringify(Store.words.map((w) => [w.word, !!w.weak])));
+    ok("Z12 clearWeak 不传层级＝清掉背诵范围内全部标记", (() => {
+      const n = Store.clearWeak();
+      return n === 1 && Store.weakCount() === 0 && Store.bookWords().every((w) => !w.weak);
+    })(), String(Store.weakCount()));
+    Store.toggleWeak(W("preserve").id, true);
+    ok("Z13 导出→导入带回标记", (() => {
+      const dump = Store.exportJSON();
+      Store.toggleWeak(W("preserve").id, false);
+      Store.importJSON(dump);
+      const w = Store.words.find((x) => x.word === "preserve");
+      return !!w && w.weak === true;
+    })(), JSON.stringify(Store.words.find((x) => x.word === "preserve") && Store.words.find((x) => x.word === "preserve").weak));
+    ok("Z14 重导入普通词表不会抹掉手动标记", (() => {
+      Store.addAll([{ word: "preserve", unit: "Unit 22", definition: "v. 保存" }], "merge", { silent: true });
+      Store.rebuild();
+      return Store.words.find((x) => x.word === "preserve").weak === true;
+    })(), JSON.stringify(Store.words.filter((x) => x.word === "preserve").map((x) => x.weak)));
+    ok("Z15 备份回灌可以把标记并到已有词上", (() => {
+      Store.toggleWeak(W("preserve").id, false);
+      Store.importJSON(JSON.stringify({ app: "noadic", version: 1, words: [{
+        word: "preserve", unit: "Unit 22", definition: "v. 保护", senses: [{ pos: "v.", meaning: "保护" }], weak: true,
+      }] }));
+      return Store.words.find((x) => x.word === "preserve").weak === true;
+    })(), JSON.stringify(Store.words.filter((x) => x.word === "preserve").map((x) => x.weak)));
+
+    /* 测验范围：只练不熟 */
+    Store.toggleWeak(W("observe").id, true);
+    Store.toggleWeak(W("deserve").id, true);
+    Store.words.filter((w) => !w.weak && !w.pool).forEach((w) => { w.status = "mastered"; });
+    Quiz.invalidateEligible();
+    Quiz.reset({ scope: "weak", override: null, wrongOnly: false });
+    ok("Z16 范围「只练不熟」只出标记过的词", (() => {
+      const weakIds = new Set(Store.weakWords().map((w) => w.id));
+      const seen = new Set();
+      for (let i = 0; i < 10; i++) {
+        const r = Quiz.next();
+        const q = r.question;
+        if (!q) break;
+        if (!weakIds.has(q.word.id)) return false;
+        seen.add(q.word.id);
+      }
+      return seen.size >= 2;
+    })(), JSON.stringify(Quiz.view().scope));
+    ok("Z17 标记为零时该范围直接空（不会退化成全库）", (() => {
+      Store.clearWeak();
+      Quiz.reset({ scope: "weak", override: null, wrongOnly: false });
+      const r = Quiz.next();
+      return !r.question;
+    })(), JSON.stringify(Object.keys(Quiz.next())));
+
+    /* 删除与撤销不能把标记弄成孤儿 */
+    Store.addAll([mk("conserve", "Unit 23", "Lesson 1", "节约")], "merge", { silent: true });
+    Store.rebuild();
+    Store.toggleWeak(W("conserve").id, true);
+    const undoBefore = Store.canUndo();
+    Store.removeScope("unit", "Unit 23");
+    ok("Z18 整单元删除后标记随词消失", Store.weakWords().every((w) => w.word !== "conserve") && !Store.words.some((w) => w.word === "conserve"),
+      JSON.stringify(Store.weakWords().map((w) => w.word)));
+    ok("Z19 撤销回来的词带着当初的标记", (() => {
+      const u = Store.undo();
+      const w = Store.words.find((x) => x.word === "conserve");
+      return !!u && !!w && w.weak === true;
+    })(), JSON.stringify(Store.words.find((x) => x.word === "conserve")));
+    ok("Z20 背诵设置项有默认值（老数据 load 后不会 undefined）",
+      Store.DEFAULT_SETTINGS.reciteMask === "zh" && Store.DEFAULT_SETTINGS.reciteFilter === "all"
+      && Store.DEFAULT_SETTINGS.reciteShuffle === false
+      && !!Store.load().settings.reciteMask, JSON.stringify([Store.settings.reciteMask, Store.settings.reciteFilter]));
+    void undoBefore;
+  })();
+
   window.__RESULT__ = R;
 })();
 `;
