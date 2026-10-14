@@ -98,6 +98,35 @@ if (-not (Test-Path -LiteralPath "android")) {
 Log "      npx cap sync android"
 npx --yes cap sync android 2>&1 | ForEach-Object { "$_" | Add-Content -LiteralPath $log -Encoding UTF8 }
 
+# 把 package.json 的版本盖写进 versionName：Capacitor 模板硬编码 "1.0"，cap add/sync 都不覆盖它。
+# CI 里有同一步，本机原来没有 —— 于是同一条 commit 会出两个版本号不一致的包。
+$pkgVer = (& node -p "require('./package.json').version")
+$gbat = Join-Path $root "android\app\build.gradle"
+if (-not (Test-Path -LiteralPath $gbat)) { Die "找不到 $gbat，无法写 versionName" }
+$gtxt = [System.IO.File]::ReadAllText($gbat)
+if ($gtxt -notmatch 'versionName "') { Die "build.gradle 里没有 versionName，模板变了，对照 CI 里的同名步骤调整" }
+[System.IO.File]::WriteAllText($gbat, ($gtxt -replace 'versionName ".*"', ('versionName "' + $pkgVer + '"')), (New-Object System.Text.UTF8Encoding($false)))
+Log "      versionName -> $pkgVer（与 package.json 对齐，不用 Set-Content 以免写出 BOM）"
+
+# 应用身份必须与 capacitor.config.json 一致：cap sync 只同步 www，**不会**把改过的
+# appId / appName 回写进已有的 android/ 工程（只有 cap add 生成时才写）。
+# 实测踩过：改名后本机出的包仍是 com.cet4.vocabengine / 「CET-4 词汇」，而 CI 从零
+# cap add，出的是 com.noadic.app —— 两条路线装出来是两个互不相干的 App。
+$cfg = Get-Content -LiteralPath (Join-Path $root "capacitor.config.json") -Raw | ConvertFrom-Json
+$wantId = $cfg.appId
+$gotId = ([regex]'applicationId\s+"([^"]+)"').Match($gtxt).Groups[1].Value
+if ($gotId -ne $wantId) {
+  Die "android/ 工程里的包名是 $gotId，capacitor.config.json 要的是 $wantId。`n     cap sync 不会更新它：删掉重生成 —— Remove-Item -Recurse -Force android; .\_tools\toolchain-and-build.ps1"
+}
+$sx = Join-Path $root "android\app\src\main\res\values\strings.xml"
+if (Test-Path -LiteralPath $sx) {
+  $gotLabel = ([regex]'<string name="app_name">([^<]*)</string>').Match((Get-Content -LiteralPath $sx -Raw)).Groups[1].Value
+  if ($gotLabel -ne $cfg.appName) {
+    Die "android/ 工程里的应用名是「$gotLabel」，capacitor.config.json 要的是「$($cfg.appName)」（桌面上会是两个不同名字的图标）。`n     同样要删掉 android/ 重新 cap add"
+  }
+}
+Log "      应用身份核对通过：$gotId / $($cfg.appName)"
+
 # ---------- 6. 图标 / 开屏（Pillow 直写 res，避开需要 GitHub 下载的 sharp） ----------
 Log "[6/7] 用 Pillow 写入图标与开屏图到 android/app/src/main/res"
 & $py (Join-Path $root "_tools\android-res.py") 2>&1 | ForEach-Object { "$_" | Add-Content -LiteralPath $log -Encoding UTF8; Write-Host "      $_" }

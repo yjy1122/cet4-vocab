@@ -55,6 +55,8 @@ foreach ($t in $targets) {
   [void][System.Management.Automation.PSParser]::Tokenize($text, [ref]$errs)
   $status = if ($errs -and $errs.Count) { "PARSE ERRORS: " + ($errs | ForEach-Object { "line $($_.Token.StartLine): $($_.Message)" }) -join '; ' } else { "parse ok" }
   $name = $t.Substring($root.Length + 1)
-  Write-Host ("{0,-38} bom:{1,-6} crlf removed:{2,-4} {3}" -f $name, $hasBom, $crlf, $status)
+  # 打印的是"处理前"的状态，容易读反（bom:False 其实是"这次给它补上了 BOM"）。说成人话。
+  $bomState = if ($hasBom) { "已有" } else { "本次补上" }
+  Write-Host ("{0,-38} BOM:{1,-8} 去掉 CRLF:{2,-4} {3}" -f $name, $bomState, $crlf, $status)
   if ($errs -and $errs.Count) { exit 2 }
 }

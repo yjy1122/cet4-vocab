@@ -18,7 +18,7 @@ function Fail($what, $fix) {
   exit 1
 }
 
-Write-Host "== 1/5 检查工具链 ==" -ForegroundColor Cyan
+Write-Host "== 1/6 检查工具链 ==" -ForegroundColor Cyan
 $node = Get-Command node -ErrorAction SilentlyContinue
 if (-not $node) { Fail "没有 Node.js" "winget install OpenJS.NodeJS.LTS 然后重开终端" }
 
@@ -41,24 +41,44 @@ Write-Host "   ✔ $jv"
 Write-Host "   ✔ Android SDK: $sdk"
 
 if (-not $SkipInstall) {
-  Write-Host "`n== 2/5 安装 npm 依赖 ==" -ForegroundColor Cyan
+  Write-Host "`n== 2/6 安装 npm 依赖 ==" -ForegroundColor Cyan
   npm install --no-audit --no-fund
 } else {
-  Write-Host "`n== 2/5 跳过 npm install ==" -ForegroundColor DarkGray
+  Write-Host "`n== 2/6 跳过 npm install ==" -ForegroundColor DarkGray
 }
 
-Write-Host "`n== 3/5 生成 / 同步 Android 工程 ==" -ForegroundColor Cyan
+Write-Host "`n== 3/6 生成 / 同步 Android 工程 ==" -ForegroundColor Cyan
 if (-not (Test-Path -LiteralPath (Join-Path $root "android"))) {
   npx --yes cap add android
 }
 npx --yes cap sync android
 
 if (Test-Path -LiteralPath (Join-Path $root "assets\icon.png")) {
-  Write-Host "`n== 4/5 生成图标与开屏图 ==" -ForegroundColor Cyan
-  npx --yes capacitor-assets generate --android --iconPath assets/icon.png --splashPath assets/splash.png
+  Write-Host "`n== 4/6 生成图标与开屏图 ==" -ForegroundColor Cyan
+  # 包名是 @capacitor/assets（不是 capacitor-assets，那个装不上），最新版 3.0.5，没有 v6。
+  # 引号不能省：PowerShell 里开头的 @ 是 splatting 语法。
+  # 图标生成失败不该拖垮整个出包 —— 最坏情况用 Capacitor 默认图标，与 CI 的 continue-on-error 一致。
+  try { npx --yes "@capacitor/assets@3" generate --android }
+  catch { Write-Host "   ⚠ 图标生成失败，本次改用 Capacitor 默认图标：$($_.Exception.Message)" -ForegroundColor Yellow }
 }
 
-Write-Host "`n== 5/5 Gradle 编译 ==" -ForegroundColor Cyan
+Write-Host "`n== 5/6 把 package.json 的版本写进 Android versionName ==" -ForegroundColor Cyan
+# Capacitor 的 android 模板把 versionName 硬编码成 "1.0"，cap add / cap sync 都不会用
+# package.json 覆盖它（实测：package.json 1.1.0，aapt dump 出来仍是 versionName='1.0'）。
+# 云构建里有这一步，本机原来没有 —— 于是同一条 commit 会出两个版本号不一致的包。
+$grad = Join-Path $root "android\app\build.gradle"
+$ver = (& node -p "require('./package.json').version")
+if (-not (Test-Path -LiteralPath $grad)) { Fail "找不到 $grad" "先跑 npm install && npx cap add android" }
+$g = [System.IO.File]::ReadAllText($grad)
+if ($g -notmatch 'versionName "') { Fail "build.gradle 里没有 versionName，模板变了" "对照 .github/workflows/android.yml 里的同名步骤调整" }
+$g2 = $g -replace 'versionName ".*"', ('versionName "' + $ver + '"')
+if ($g2 -ne $g) {
+  # 不用 Set-Content -Encoding UTF8：PS 5.1 会写 BOM，Gradle 读带 BOM 的 groovy 脚本会翻脸
+  [System.IO.File]::WriteAllText($grad, $g2, (New-Object System.Text.UTF8Encoding($false)))
+}
+Write-Host "   ✔ versionName -> $ver"
+
+Write-Host "`n== 6/6 Gradle 编译 ==" -ForegroundColor Cyan
 Push-Location (Join-Path $root "android")
 try {
   $task = if ($Release) { "assembleRelease" } else { "assembleDebug" }
