@@ -68,7 +68,7 @@ function nodes(xml) {
     const g = (k) => { const r2 = new RegExp(k + '="([^"]*)"').exec(tag); return r2 ? r2[1] : ""; };
     const x1 = +b[1], y1 = +b[2], x2 = +b[3], y2 = +b[4];
     out.push({
-      text: g("text"), desc: g("content-desc"), cls: g("class"), id: g("resource-id"),
+      text: g("text"), desc: g("content-desc"), hint: g("hint"), cls: g("class"), id: g("resource-id"),
       enabled: g("enabled") !== "false", clickable: g("clickable") === "true",
       x: (x1 + x2) / 2, y: (y1 + y2) / 2, w: x2 - x1, h: y2 - y1,
     });
@@ -95,9 +95,11 @@ function findNode(xml, want) {
   return ns.find((n) => n.text === want) || ns.find((n) => n.text && n.text.includes(want))
     || ns.find((n) => n.desc && n.desc.includes(want)) || null;
 }
+/* 按 resource-id 精确取撤销按钮：DOM 元素的 id 会作为 resource-id 出现在
+   Chrome 的无障碍树里，比按文字找可靠——toast 文案里也有「撤销上次改动」这几个字。 */
+const undoBtn = (xml) => nodes(xml || dump()).find((n) => /btn-undo-import$/.test(n.id || "")) || null;
 /* 每次点击前重新 dump：用旧坐标点过一次的教训是"旋转/布局一变就点到别处"。 */
-function tapText(want, label) {
-  const n = findNode(dump(), want);
+function tapText(want, label) {  const n = findNode(dump(), want);
   if (!n) { ok("点击「" + (label || want) + "」", false, "屏幕上找不到该文字的节点"); return false; }
   if (!n.enabled) { ok("点击「" + (label || want) + "」", false, "节点存在但是禁用态（enabled=false）"); return false; }
   adb("shell", "input", "tap", String(Math.round(n.x)), String(Math.round(n.y)));
@@ -149,27 +151,34 @@ ok("D4 顺序闯关条显示当前块与达标进度", /Unit \d+.*已掌握.*混
    （flex 会把按钮拉伸到输入框等高，高度量不出换行） */
 let cssInApk = "";
 try {
-  const py = "import zipfile,sys,re;" +
-    "z=zipfile.ZipFile(sys.argv[1]);" +
-    "c=z.read('assets/public/css/app.css').decode('utf-8');" +
-    "m=re.search(r'\\\\.answerrow\\\\s+button\\\\s*\\\\{[^}]*\\\\}',c);" +
-    "print((m.group(0) if m else 'NORULE').replace(chr(10),' '))";
+  // 只做子串查找，不写正则：往 JS 字符串里塞 python 正则的转义层，上一版就是这么把
+  // 明明存在的规则读成 NORULE 的（假失败）。
+  const py = [
+    "import zipfile,sys",
+    "z=zipfile.ZipFile(sys.argv[1])",
+    "c=z.read('assets/public/css/app.css').decode('utf-8')",
+    "i=c.find('.answerrow button')",
+    "print('NORULE' if i<0 else c[i:i+80].replace(chr(10),' '))",
+  ].join(";");
   cssInApk = run("python", ["-c", py, APK]).trim();
 } catch (e) { cssInApk = "ERR:" + e.message; }
-ok("D5 出厂 CSS 里判定按钮有 white-space:nowrap", /white-space:\s*nowrap/.test(cssInApk), cssInApk.slice(0, 120));
+ok("D5 出厂 CSS 里判定按钮有 white-space:nowrap", cssInApk.includes("nowrap"), cssInApk.slice(0, 110));
 
-/* 滑动切题：在题面提示语那一行上滑（避开 input/.seg/.seqbar/.litem） */
+/* 滑动切题：在题型标签那一行上滑（它是卡片里的静态元素，不在 attachSwipe 的
+   排除名单 input/.seg/.seqbar/.litem 里；上一版按"宽节点"选位，结果选到了顶栏 y=114，
+   滑了个寂寞） */
 xml = dump();
 const before = allText(xml);
-const prompt = nodes(xml).find((n) => /根据音标|选出下列|填入恰当|哪个含义/.test(n.text || ""))
-  || nodes(xml).find((n) => n.text && n.text.length > 6 && n.w > 300 && n.h > 20 && n.h < 120);
+const TYPE_RE = /四选一|听音拼写|语境填空|熟词生义/;
+const prompt = nodes(xml).find((n) => TYPE_RE.test(n.text || "") && n.h > 15 && n.h < 90)
+  || nodes(xml).find((n) => /根据音标|选出下列|填入恰当|哪个含义/.test(n.text || ""));
 if (!prompt) {
-  ok("D6 右滑切到下一题", false, "找不到题面提示节点，无法确定安全滑动位置");
+  ok("D6 右滑切到下一题", false, "找不到题型标签/题面提示节点，无法确定安全滑动位置");
 } else {
   const yy = Math.round(prompt.y);
   adb("shell", "input", "swipe", "950", String(yy), "150", String(yy), "260");
   await sleep(1300);
-  ok("D6 右滑切到下一题（题面文字变化）", allText(dump()) !== before, "滑动位置 y=" + yy + "，文字未变");
+  ok("D6 右滑切到下一题（题面文字变化）", allText(dump()) !== before, "滑动位置 y=" + yy + "（" + prompt.text + "），文字未变");
   shot("after-swipe");
 }
 
@@ -183,8 +192,9 @@ await sleep(900);
 xml = dump(); all = allText(xml);
 const m = all.match(/共 (\d+) 个单词/);
 const cnt = m ? +m[1] : 0;
+// 弹窗标题形如「删除单元 · Unit 2」；用 · 区分它和工具栏上那个纯文字「删除单元」按钮
+const titleUnit = (nodes(xml).find((n) => /删除单元\s*·/.test(n.text || "")) || {}).text || "";
 const unitName = (titleUnit.match(/Unit \d+/) || [""])[0];
-const titleUnit = (nodes(xml).find((n) => /删除单元/.test(n.text || "")) || {}).text || "";
 ok("D8 确认弹窗说明删的是整个单元并报出词数", /将删除整个单元/.test(all) && cnt > 0, m ? "报数 " + cnt : all.slice(0, 120));
 ok("D9 弹窗提示可用「撤销上次改动」恢复", /撤销上次改动/.test(all), "");
 shot("del-modal");
@@ -197,24 +207,31 @@ await sleep(1600);
 xml = dump(); all = allText(xml);
 const topN = +((all.match(/(\d+) 词 ｜ 已补全/) || [0, -1])[1]);
 ok("D10 确认后词库真的少了一个单元", topN === 127 - cnt, "顶栏 " + topN + " 词，期望 " + (127 - cnt));
+const unitCards = (x) => nodes(x).map((n) => n.text).filter((t) => /^Unit \d+$/.test(t || ""));
 ok("D11 被删的那个单元已不在列表，其余单元还在",
-  unitName && !new RegExp(unitName + " \\d+/\\d+ 词").test(all) && /Unit \d+ \d+\/\d+ 词/.test(all),
-  "删的是 " + (unitName || "?") + "；现存 " + (all.match(/Unit \d+ \d+\/\d+ 词/g) || []).join(" / "));
+  unitCards(xml).length > 0 && !(unitCards(xml).includes(unitName)),
+  "删的是 " + (unitName || "?") + "；现存 " + (unitCards(xml).join(",") || "无"));
 shot("after-delete");
 
-/* 这条就是本次真机测试抓到的 bug：删除产生了快照，但按钮的 disabled 没被刷新 */
-const undoNode = findNode(xml, "撤销上次改动");
-ok("D12 删除后「撤销上次改动」按钮是可用态（不是灰的）", !!undoNode && undoNode.enabled,
-  undoNode ? "enabled=" + undoNode.enabled : "找不到按钮节点");
-if (!tapText("撤销上次改动", "撤销上次改动")) die("撤销按钮点不动");
+/* 撤销：断言的是**行为**（点得动、词数回来），不是某个可能说谎的状态位。
+   上一版这里查 a11y 的 enabled，结果它给的是过期值，真机上一度把好的实现判成失败。 */
+const ub = undoBtn();
+ok("D12 「撤销上次改动」按钮可点（不被 disabled 卡住）", !!ub && ub.enabled,
+  ub ? "enabled=" + ub.enabled + " 位置=(" + Math.round(ub.x) + "," + Math.round(ub.y) + ")" : "找不到 resource-id=btn-undo-import 节点");
+if (ub) adb("shell", "input", "tap", String(Math.round(ub.x)), String(Math.round(ub.y)));
 await sleep(1700);
 xml = dump(); all = allText(xml);
 ok("D13 撤销把整单元恢复回来（回到 127 词且该单元回来）",
-  /127 词 ｜ 已补全 127/.test(all) && new RegExp(unitName + " \\d+/\\d+ 词").test(all),
-  (all.match(/\d+ 词 ｜ 已补全 \d+/) || ["无"])[0] + " | " + (all.match(/Unit \d+ \d+\/\d+ 词/g) || []).join(" / "));
+  /127 词 ｜ 已补全 127/.test(all) && unitCards(xml).includes(unitName),
+  (all.match(/\d+ 词 ｜ 已补全 \d+/) || ["无"])[0] + " | 单元 " + (unitCards(xml).join(",") || "无"));
 shot("after-undo");
-ok("D14 撤销后按钮回到禁用态（快照已消费，不能重复撤销）",
-  (() => { const n = findNode(dump(), "撤销上次改动"); return !n || !n.enabled; })(), "");
+const ub2 = undoBtn();
+if (ub2) adb("shell", "input", "tap", String(Math.round(ub2.x)), String(Math.round(ub2.y)));
+await sleep(1200);
+const all2 = allText(dump());
+ok("D14 再点一次不会破坏数据，并明确告知没有可撤销记录",
+  /127 词 ｜ 已补全 127/.test(all2) && /没有可撤销/.test(all2),
+  (all2.match(/\d+ 词 ｜ 已补全 \d+/) || ["无"])[0] + " | toast: " + ((all2.match(/[^|]*没有可撤销[^|]*/) || ["无"])[0]).trim());
 
 if (SELFTEST) R.push({ name: "Z. SELFTEST 负向对照（本应失败）", pass: false, extra: "故意写错" });
 

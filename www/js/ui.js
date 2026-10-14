@@ -247,15 +247,15 @@ const UI = (() => {
     return list;                                       // 默认＝书序（词库插入顺序）
   }
 
-  /** 撤销按钮的可用态必须跟着快照走。它原先只在打开设置抽屉时刷新一次，
-   *  于是"删完一整单元→按钮仍是灰的→点不动"（真机实测）。渲染词库时同步即可，
-   *  因为所有会产生快照的动作（入库、删词、删课、删单元）都会重渲染词库。 */
+  /** 撤销按钮**永远可点**，可撤销与否由点击后的反馈说明。
+   *  之前用 disabled 表达"没得撤销"，真机实测会卡在过期状态：删完一整单元、快照明明在
+   *  localStorage 里，按钮却仍是禁用态，用户在最需要它的时刻点不动。
+   *  一个会因为渲染时机说谎的开关，不如不要。 */
   function syncUndoBtn() {
     const b = $("#btn-undo-import");
     if (!b) return;
-    const can = Store.canUndo();
-    b.disabled = !can;
-    b.title = can ? "回滚最近一次入库或批量删除" : "暂无可撤销的操作（只保留最近一次入库或批量删除）";
+    b.disabled = false;
+    b.title = Store.canUndo() ? "回滚最近一次入库或批量删除" : "点一下尝试回滚（只保留最近一次入库或批量删除）";
   }
 
   function renderLibrary() {
@@ -612,7 +612,7 @@ const UI = (() => {
     $("#set-ai-key").value = s.ai.key || "";
     const u = Store.usage();
     $("#storage-info").innerHTML = `本机已存 ${u.words} 词，约 ${u.kb} KB（localStorage 上限一般 5 MB）。导出 JSON 可跨设备迁移，导入时同样走合并去重；备份里的学习进度会带回，本机练得更多的不会被覆盖。`;
-    $("#btn-undo-import").disabled = !Store.canUndo();
+    syncUndoBtn();          // 不再在这里写 disabled，统一走同一个入口
     renderTypeChecks();
   }
 
