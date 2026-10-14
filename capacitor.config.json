@@ -6,7 +6,7 @@
     "allowMixedContent": false,
     "backgroundColor": "#ffffff",
     "appendUserAgent": "noadic-app",
-    "webContentsDebuggingEnabled": false
+    "webContentsDebuggingEnabled": true
   },
   "server": {
     "androidScheme": "https"

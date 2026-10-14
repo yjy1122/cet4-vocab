@@ -149,7 +149,9 @@ label.mini, .mini { font-size: 12px; color: var(--mut); display: inline-flex; ga
 .opt.dim { opacity: .55; }
 .opt:disabled { cursor: default; }
 .answerrow { display: flex; gap: 8px; margin-top: 12px; }
-.answerrow input { font-size: 17px; letter-spacing: .03em; }
+.answerrow input { font-size: 17px; letter-spacing: .03em; min-width: 0; }
+/* 判定按钮不能被输入框挤成竖排两字（真机实测：竖屏与横屏都会换行） */
+.answerrow button { flex: 0 0 auto; white-space: nowrap; }
 .speak { background: none; border: 1px dashed var(--line2); color: var(--acc); border-radius: 9px; padding: 3px 9px; font-size: 12px; cursor: pointer; margin-left: 6px; }
 
 .mini.ok { color: var(--ok); } .mini.warn { color: var(--bad); }
