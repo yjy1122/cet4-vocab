@@ -33,7 +33,9 @@ if ($SelfTest) {
     @{ n = "删掉 push.tags";  find = "    tags: ['v*']";                 repl = "";                                  want = 2 },
     @{ n = "contents 只读";   find = "  contents: write";                repl = "  contents: read";                want = 2 },
     @{ n = "删掉发布步骤名";   find = "发布到 GitHub Release";             repl = "打个包";                            want = 2 },
-    @{ n = "发布说明改回内联（脱离 CHANGELOG）"; find = '--notes-file "$NOTES"'; repl = '--notes "$NOTES"'; want = 2 }
+    @{ n = "发布说明改回内联（脱离 CHANGELOG）"; find = '--notes-file "$NOTES"'; repl = '--notes "$NOTES"'; want = 2 },
+    # 把共享的工程修正步骤换成一句 echo：形状检查必须发现（这条正是 CI 与本机漂移的成因）
+    @{ n = "删掉 prepare-android 步骤"; find = 'node _tools/prepare-android.mjs'; repl = 'echo 打个包'; want = 2 }
   )
   $bad = 0
   foreach ($c in $cases) {
@@ -130,6 +132,14 @@ else:
         bad.append("release step uses inline --notes instead of --notes-file -> 发布说明脱离 CHANGELOG")
     if "CHANGELOG.md" not in txt:
         bad.append("release step never reads CHANGELOG.md -> 更新日志不再是 Release 正文的真源")
+    # 工程修正必须走共享脚本。本机与 CI 各抄一份 sed 的时候，CI 漏了 usesCleartextTraffic，
+    # 结果 Releases 下载的包连不上本地 http 端点、本机构建的却可以。这条断言防分叉回来。
+    # 注意作用域：txt 只是发布步骤那段脚本，这两条得扫全部 run 块。
+    allrun = "\n".join(str(s.get("run", "")) for s in steps)
+    if "prepare-android.mjs" not in allrun:
+        bad.append("workflow does not run _tools/prepare-android.mjs -> 版本/明文许可/身份核对会漂移")
+    if "cap sync" not in allrun:
+        bad.append("workflow lost the 'cap sync' step -> www 不会进包")
 
 up = [s for s in steps if "upload-artifact" in str(s.get("uses", ""))]
 if not up:
