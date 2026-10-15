@@ -90,6 +90,13 @@ function dump() {
   return "";
 }
 const allText = (xml) => nodes(xml).map((n) => n.text).filter(Boolean).join(" | ");
+/* 词数取自顶栏「N 词 ｜ 已补全 M」。
+   为什么不用"那个词还在不在树里"判断删除成功：
+     · toast 的文案里就写着被删的词名（外层+子节点两层，按 id 滤不干净）；
+     · Chrome 会把无语义的容器压平——实测 #lib-list 的子树里只有单元表头，
+       词条行并不挂在它下面，所以"按 DOM id 取子树"这条路的假设是错的。
+   计数是唯一不受文案污染、也不依赖树结构的信号。 */
+const wordCount = (xml) => { const m = /(\d+) 词 ｜ 已补全/.exec(allText(xml)); return m ? +m[1] : null; };
 function findNode(xml, want) {
   const ns = nodes(xml);
   return ns.find((n) => n.text === want) || ns.find((n) => n.text && n.text.includes(want))
@@ -102,6 +109,37 @@ const undoBtn = (xml) => nodes(xml || dump()).find((n) => /btn-undo-import$/.tes
 function tapText(want, label) {  const n = findNode(dump(), want);
   if (!n) { ok("点击「" + (label || want) + "」", false, "屏幕上找不到该文字的节点"); return false; }
   if (!n.enabled) { ok("点击「" + (label || want) + "」", false, "节点存在但是禁用态（enabled=false）"); return false; }
+  adb("shell", "input", "tap", String(Math.round(n.x)), String(Math.round(n.y)));
+  return true;
+}
+const nodeById = (xml, re) => nodes(xml || dump()).find((n) => re.test(n.id || "")) || null;
+/* 屏幕高度：uiautomator 会给"被裁切到可视区外"的节点照常报坐标，
+   照着那个坐标点下去什么也不会发生——弹窗里的按钮就是这么被吃掉的（D21 第一次就是这么挂的）。 */
+let SH = 1920, SW = 1080;
+try {
+  const m = /(\d+)x(\d+)/.exec(adb("shell", "wm", "size") || "");
+  if (m) { SW = +m[1]; SH = +m[2]; }
+} catch (e) { }
+const inView = (n) => !!n && n.w > 0 && n.h > 0 && n.y + n.h / 2 <= SH && n.y - n.h / 2 >= 0 && n.x + n.w / 2 <= SW && n.x - n.w / 2 >= 0;
+/* 朝上滑动把目标滚进可视区，最多 5 次；每次都重新 dump（布局一变旧坐标就是废的）。 */
+async function revealNode(find, label) {
+  for (let i = 0; i < 5; i++) {
+    const n = find(dump());
+    if (n && inView(n)) return n;
+    if (i === 0 && n) console.log("  ↻ 「" + label + "」在可视区外（y=" + Math.round(n.y) + "，屏高 " + SH + "），先滚进来");
+    adb("shell", "input", "swipe", String(Math.round(SW / 2)), String(Math.round(SH * 0.72)),
+      String(Math.round(SW / 2)), String(Math.round(SH * 0.34)), "350");
+    await sleep(700);
+  }
+  const last = find(dump());
+  return last && inView(last) ? last : null;
+}
+/* 按 resource-id 点击：确认弹层的按钮文字（"删除"）在词库行上也存在，
+   按文字找会点到行上的那个，所以这条新路径必须按 id 点。 */
+function tapId(re, label) {
+  const n = nodeById(dump(), re);
+  if (!n) { ok("点击 #" + label, false, "无障碍树里没有 #" + label + " 节点（弹层大概没弹出）"); return false; }
+  if (!n.enabled) { ok("点击 #" + label, false, "#" + label + " 是禁用态"); return false; }
   adb("shell", "input", "tap", String(Math.round(n.x)), String(Math.round(n.y)));
   return true;
 }
@@ -137,6 +175,24 @@ for (let i = 0; i < 30 && !ready; i++) {
   ready = /\d+ 词 ｜ 已补全/.test(allText(xml));
 }
 if (!ready) die("首屏 30 秒内没就绪（顶栏没出现「N 词 ｜ 已补全」）");
+
+/* MuMu 会自己转成横屏（历史上跑测试中途转过两次）。整套断言按竖屏布局写，
+   朝向一错报出来的就是"点不到"，很容易被误读成"功能坏了"——先锁回竖屏再继续。
+   顺带用根节点真实宽高刷新 SW/SH：wm size 给的是物理尺寸，不随朝向变。 */
+async function ensurePortrait() {
+  for (let i = 0; i < 3; i++) {
+    const root = nodes(dump())[0];
+    if (root) { SW = Math.min(root.w, root.h); SH = Math.max(root.w, root.h); }
+    if (root && root.w <= root.h) return true;
+    console.log("  ↻ 检测到横屏（根节点 " + (root ? root.w + "x" + root.h : "?") + "），锁回竖屏");
+    adbSoft("shell", "settings", "put", "system", "accelerometer_rotation", "0");
+    adbSoft("shell", "settings", "put", "system", "user_rotation", "0");
+    await sleep(2600);
+  }
+  const r = nodes(dump())[0];
+  return !!r && r.w <= r.h;
+}
+if (!(await ensurePortrait())) die("锁不住竖屏，断言的坐标前提不成立");
 
 /* ---------- 断言 ---------- */
 console.log("[3/4] 断言");
@@ -322,6 +378,69 @@ if (!tapText("☆", "☆ 标记不熟")) {
   await sleep(900);
 }
 shot("recite");
+
+/* ---------- 页内确认弹层（鸿蒙 ArkWeb 不提供默认 JS 弹框，删除改走这条路径） ---------- */
+console.log("[4/4] 词库删除确认弹层");
+if (!tapText("词库", "词库标签")) die("点不到「词库」");
+await sleep(1200);
+const edNode = await revealNode((x) => findNode(x, "编辑"), "编辑");
+if (!edNode) die("词库行上的「编辑」滚不进可视区");
+adb("shell", "input", "tap", String(Math.round(edNode.x)), String(Math.round(edNode.y)));
+await sleep(1000);
+const tNode = nodeById(null, /modal-title$/);
+const word = tNode ? (tNode.text || "").replace(/^编辑词条\s*[·:]\s*/, "").trim() : "";
+ok("D20 编辑弹窗打开（探针词 " + (word || "?") + "）", !!tNode && /编辑词条/.test(tNode.text || "") && word.length > 2,
+  tNode ? tNode.text : "没有 #modal-title 节点");
+
+if (!tNode || !word) {
+  ok("D21 确认框压在编辑弹窗之上并显示词名", false, "上一步没拿到探针词");
+  ok("D22 取消后词没被删、编辑弹窗没被一起关掉", false, "同上");
+  ok("D23 确认后少了一个词、弹层收起、可撤销", false, "同上");
+  ok("D24 撤销把词恢复回来", false, "同上");
+} else {
+  const del1 = await revealNode((x) => findNode(x, "删除该词"), "删除该词");
+  if (!del1) die("编辑弹窗里的「删除该词」滚不进可视区（弹窗 max-height 裁切）");
+  adb("shell", "input", "tap", String(Math.round(del1.x)), String(Math.round(del1.y)));
+  await sleep(900);
+  const qm = nodeById(null, /qbox-msg$/);
+  ok("D21 确认框压在编辑弹窗之上并显示词名", !!qm && (qm.text || "").includes(word) && !!nodeById(null, /modal-title$/),
+    qm ? qm.text.slice(0, 60) : "#qbox-msg 不存在=页内弹层没弹出（删除该词中心 y=" + Math.round(del1.y) + "，屏高 " + SH + "）");
+  shot(qm ? "qbox" : "qbox-missing");     // 遮挡关系、字号、按钮位置这类问题断言看不见，必须留一张图
+
+  const n0 = wordCount(dump());
+  if (n0 === null) die("顶栏读不到「N 词 ｜ 已补全」，D22–D24 的计数判据不成立");
+  if (!tapId(/qbox-cancel$/, "qbox-cancel")) die("点不到取消");
+  await sleep(900);
+  const nCancel = wordCount(dump());
+  ok("D22 取消后词没被删、编辑弹窗没被一起关掉", nCancel === n0 && !nodeById(null, /qbox-msg$/) && !!nodeById(null, /modal-title$/),
+    "词数 " + n0 + "→" + nCancel + "，确认框" + (nodeById(null, /qbox-msg$/) ? "还开着" : "已关")
+    + "，编辑弹窗" + (nodeById(null, /modal-title$/) ? "还在" : "没了"));
+
+  // D22 已确认编辑弹窗还开着（滚动位置也还在），直接再点一次「删除该词」
+  const del2 = await revealNode((x) => findNode(x, "删除该词"), "删除该词");
+  if (!del2) die("第二次找不到「删除该词」");
+  adb("shell", "input", "tap", String(Math.round(del2.x)), String(Math.round(del2.y)));
+  await sleep(900);
+  if (!nodeById(null, /qbox-msg$/)) die("第二次点删除没有弹出确认框");
+  if (!tapId(/qbox-ok$/, "qbox-ok")) die("点不到确认");
+  await sleep(1600);
+  const afterXml = dump();
+  const nAfter = wordCount(afterXml);
+  const qboxStill = !!nodeById(afterXml, /qbox-msg$/);
+  const ub = undoBtn();
+  ok("D23 确认后少了一个词、弹层收起、可撤销", nAfter === n0 - 1 && !qboxStill && !!ub && ub.enabled,
+    "词数 " + n0 + "→" + nAfter + "；确认框" + (qboxStill ? "还开着（#qbox-ok 那一下没被接住）" : "已关闭")
+    + "；撤销按钮" + (ub ? (ub.enabled ? "可点" : "灰着") : "不存在"));
+  if (nAfter !== n0 - 1 || qboxStill) shot("qbox-stuck");
+
+  if (ub && tapId(/btn-undo-import$/, "btn-undo-import")) {
+    await sleep(1800);
+    const nUndo = wordCount(dump());
+    ok("D24 撤销把词恢复回来", nUndo === n0, "词数 " + n0 + "→" + nAfter + "→" + nUndo + "（撤销后应回到 " + n0 + "）");
+  } else {
+    ok("D24 撤销把词恢复回来", false, "撤销按钮点不到");
+  }
+}
 
 if (SELFTEST) R.push({ name: "Z. SELFTEST 负向对照（本应失败）", pass: false, extra: "故意写错" });
 
