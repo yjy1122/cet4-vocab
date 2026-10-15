@@ -2,8 +2,12 @@
 import fs from "node:fs";
 import path from "node:path";
 import vm from "node:vm";
+import { fileURLToPath } from "node:url";
 
-const root = "D:\\Users\\DawnFish\\Desktop\\新建文件夹";
+/* 仓库根从本文件位置推出来。以前这里硬编码 "D:\\Users\\...\\新建文件夹"，
+   等于换一台机器/换一个 worktree 就起不来——本项目的 www 与 harmony 分支共用同一套测试。 */
+const here = path.dirname(fileURLToPath(import.meta.url));
+const root = path.resolve(here, "..");
 const mods = ["www/js/seed-words.js", "www/js/lexicon.js", "www/js/dict-extra.js", "www/js/store.js", "www/js/parse.js", "www/js/distractors.js", "www/js/quiz.js", "www/js/ai.js"];
 const code = mods.map((f) => fs.readFileSync(path.join(root, f), "utf8")).join("\n;\n");
 
@@ -11,6 +15,7 @@ const mem = new Map();
 const sandbox = {
   console, JSON, Math, Date, RegExp, Set, Map, Array, Object, String, Number, Promise, Error, Proxy, Reflect, Boolean, Symbol, parseInt, parseFloat, isNaN,
   TextDecoder, Blob, Response, DecompressionStream, structuredClone, setTimeout, clearTimeout, fetch,
+  AbortController, AbortSignal,      // ai.js 的 chat() 用超时中断；不给就会 ReferenceError
   localStorage: {
     getItem: (k) => (mem.has(k) ? mem.get(k) : null),
     setItem: (k, v) => mem.set(k, String(v)),
@@ -26,12 +31,46 @@ vm.createContext(sandbox);
 /* 1) 加载模块 */
 vm.runInContext(code, sandbox, { filename: "bundle.js" });
 
-/* 2) 先用沙箱外解析真实 docx，结果作为常量注入 */
-const buf = fs.readFileSync("D:\\Users\\DawnFish\\Desktop\\样例.docx");
-const ab = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
-const dres = await sandbox.window.Parse.file({ name: "样例.docx", arrayBuffer: async () => ab });
-sandbox.window.__DOCX__ = dres;
-sandbox.window.__AB__ = ab;
+/* 2) 先用沙箱外解析真实 docx，结果作为常量注入。
+      输入是仓库内的 fixture（python _tools/make-docx-fixture.py 生成）。
+      以前这里直接读桌面上的 样例.docx —— 仓库外的文件，被移进回收站当天整套测试就起不来，
+      而且报的是 ENOENT 而不是"某条断言失败"，很容易被当成环境问题放过去。 */
+const DOCX_PATH = process.env.NOADIC_DOCX || path.join(here, "fixtures", "sample.docx");
+let docxBuf = null, docres = null;
+try {
+  docxBuf = fs.readFileSync(DOCX_PATH);
+} catch (e) {
+  console.error(`\n❌ 读不到 docx 样例：${DOCX_PATH}\n   （fixture 丢了就跑：python _tools/make-docx-fixture.py；`
+    + `或用 NOADIC_DOCX=<路径> 指定一份真实的 Word 文件）\n   原始报错：${e.message}`);
+  process.exit(1);
+}
+{
+  const ab = docxBuf.buffer.slice(docxBuf.byteOffset, docxBuf.byteOffset + docxBuf.byteLength);
+  docres = await sandbox.window.Parse.file({ name: "sample.docx", arrayBuffer: async () => ab });
+  sandbox.window.__DOCX__ = docres;
+  sandbox.window.__AB__ = ab;
+}
+/* fixture 自身的健全性：解出来的词条必须和 seed 一一对应。
+   少了这一条，"G1 解出 127 条" 就可能在 fixture 退化后悄悄变成假阳性。 */
+{
+  const seed = sandbox.window.SEED_WORDS;
+  const Lex = sandbox.window.Lex;            // Lex 是沙箱里的全局，Node 作用域里没有这个名字
+  const cands = docres.candidates;
+  if (!Array.isArray(seed) || !Lex || typeof Lex.norm !== "function") {
+    console.error("\n❌ 沙箱里拿不到 SEED_WORDS / Lex，fixture 自检无法进行（结论不可用）");
+    process.exit(1);
+  }
+  const bad = [];
+  for (let i = 0; i < Math.min(seed.length, cands.length); i++) {
+    if (Lex.norm(seed[i].word) !== Lex.norm(cands[i].word)) bad.push(`#${i} ${seed[i].word} vs ${cands[i].word}`);
+  }
+  if (cands.length !== seed.length) bad.push(`条数 ${cands.length} ≠ seed ${seed.length}`);
+  if (bad.length) {
+    console.error("\n❌ fixture 与种子数据对不上，G 段的结论不可信：\n   " + bad.slice(0, 8).join("\n   "));
+    process.exit(1);
+  }
+  console.log(`   fixture 自检：解出 ${cands.length} 条，与 seed 逐条同名 ✅`);
+}
 
 /* 3) 测试主体 */
 const TEST = String.raw`
@@ -643,6 +682,35 @@ const TEST = String.raw`
     Store.settings.ai = { baseURL: "not-a-url", model: "", key: "" };
     const rb = await AI.probe();
     ok("W11 非法 Base URL 提前拦下", rb.kind === "badurl", JSON.stringify(rb).slice(0, 80));
+
+    /* W12 挂死的端点必须被超时中断。
+       这是"点了 AI 补全然后毫无反应"的根因之一：没有上限时 fetch 会永远挂着，
+       界面停在"正在调用…"，既不报错也不出结果。
+       把沙箱里的 setTimeout 压到 5ms，避免真等 45 秒。 */
+    await (async () => {
+      const realST = globalThis.setTimeout;
+      let fired = false;
+      globalThis.setTimeout = (fn) => realST(() => { fired = true; fn(); }, 5);
+      Store.settings.ai = { baseURL: "https://test.local/v1", model: "m", key: "k", timeout: 45 };
+      globalThis.fetch = (u, opt) => new Promise((_res, rej) => {
+        // 一个永不 resolve、但尊重 signal 的服务端：只有真的把 signal 传下去，这条才会结束
+        if (opt && opt.signal) opt.signal.addEventListener("abort", () => {
+          const e = new Error("This operation was aborted"); e.name = "AbortError"; rej(e);
+        });
+      });
+      let msg = "";
+      try { await AI.chat([{ role: "user", content: "x" }]); msg = "没有抛错"; } catch (e) { msg = e.message; }
+      globalThis.setTimeout = realST;
+      ok("W12 端点挂死会被超时中断并说明原因与出路", fired && /45 秒内没有响应/.test(msg) && /复制粘贴桥|调大/.test(msg), msg.slice(0, 90));
+    })();
+
+    /* W13 超时值的收敛：与设置界面 min/max 一致，别让填 3 的人等到 90 秒 */
+    {
+      const t = (v) => { Store.settings.ai = { baseURL: "https://x/v1", key: "k", timeout: v }; return AI.timeoutSec(); };
+      ok("W13 超时值收敛（3→10 下限、900→600 上限、空/脏→90）",
+        t(3) === 10 && t(900) === 600 && t("") === 90 && t("abc") === 90 && t(120) === 120,
+        [t(3), t(900), t(""), t("abc"), t(120)].join(","));
+    }
     globalThis.fetch = realFetch;
     Store.settings.ai = { baseURL: "", model: "", key: "" };
   })();

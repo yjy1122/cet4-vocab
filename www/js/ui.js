@@ -352,7 +352,7 @@ const UI = (() => {
   function bindLib() {
     $$("#lib-list .litem").forEach((el) => {
       const id = el.dataset.id;
-      $$("[data-act]", el).forEach((b) => b.addEventListener("click", () => {
+      $$("[data-act]", el).forEach((b) => b.addEventListener("click", async () => {
         const w = Store.byId(id);
         if (b.dataset.act === "speak") speak(w.word);
         if (b.dataset.act === "edit") openEditor(w);
@@ -362,9 +362,10 @@ const UI = (() => {
           if ($("#view-recite").classList.contains("active")) renderRecite();
           toast(on ? `已标记 <b>${esc(w.word)}</b> 背不熟　<span class="tag">背诵页可只看这些</span>` : `已取消 <b>${esc(w.word)}</b> 的不熟标记`);
         }
-        if (b.dataset.act === "reset") { w.srs = Lex.freshSrs(); w.status = "new"; Store.save(); renderLibrary(); renderProgress(); toast(`已重置 <b>${esc(w.word)}</b> 的进度`); }        if (b.dataset.act === "del") {
-          if (!confirm(`删除「${w.word}」？
-该词的错题记录与掌握进度会一并删除。删错可用词库上方「撤销上次改动」恢复。`)) return;
+        if (b.dataset.act === "reset") { w.srs = Lex.freshSrs(); w.status = "new"; Store.save(); renderLibrary(); renderProgress(); toast(`已重置 <b>${esc(w.word)}</b> 的进度`); }
+        if (b.dataset.act === "del") {
+          if (!(await askConfirm(`删除「${w.word}」？
+该词的错题记录与掌握进度会一并删除。删错可用词库上方「撤销上次改动」恢复。`, { okText: "删除", danger: true }))) return;
           Store.snapshot();                       // 删除前打快照，走同一条撤销通道
           Store.remove(id);
           Quiz.forgetScope(null);                 // 当前题若正是这个单词，必须作废，否则答案写进已删对象
@@ -598,17 +599,17 @@ const UI = (() => {
     const usel = $("#pin-unit"), lsel = $("#pin-lesson");
     if (!usel || usel.dataset.bound) return;
     usel.dataset.bound = "1"; lsel.dataset.bound = "1";
-    usel.onchange = () => {
+    usel.onchange = async () => {
       let v = usel.value;
-      if (v === "__new") { v = (prompt("单元名称（如 Unit 1 / Module 3）", "Unit " + (Store.units().filter((u) => u !== "未分组").length + 1)) || "").trim(); if (!v) { renderPins(); return; } }
+      if (v === "__new") { v = ((await askPrompt("单元名称（如 Unit 1 / Module 3）", "Unit " + (Store.units().filter((u) => u !== "未分组").length + 1), { okText: "新建" })) || "").trim(); if (!v) { renderPins(); return; } }
       Store.setSetting("pinnedUnit", v === "auto" ? "" : v);
       if (v === "auto") Store.setSetting("pinnedLesson", "");
       renderPins();
       if (app.refreshParsePreview) app.refreshParsePreview();
     };
-    lsel.onchange = () => {
+    lsel.onchange = async () => {
       let v = lsel.value;
-      if (v === "__new") { v = (prompt("课次名称（如 Lesson 2）", "Lesson 1") || "").trim(); if (!v) { renderPins(); return; } }
+      if (v === "__new") { v = ((await askPrompt("课次名称（如 Lesson 2）", "Lesson 1", { okText: "新建" })) || "").trim(); if (!v) { renderPins(); return; } }
       Store.setSetting("pinnedLesson", v === "auto" ? "" : v);
       renderPins();
       if (app.refreshParsePreview) app.refreshParsePreview();
@@ -693,7 +694,7 @@ const UI = (() => {
         <button class="ghost" id="ed-one">仅此词 AI 补全</button></div>`;
     $("#modal").classList.remove("hidden");
     $("#modal-save").textContent = "保存"; $("#modal-save").classList.remove("danger");
-    $("#ed-del").onclick = () => { if (confirm(`从词库删除「${w.word}」？\n该词的错题记录与掌握进度会一并删除，可用「撤销上次改动」恢复。`)) { Store.snapshot(); Store.remove(w.id); Quiz.forgetScope(null); closeModal(); renderLibrary(); renderWrongbook(); renderProgress(); renderScope(); renderStrip(); toast(`已删除 <b>${esc(w.word)}</b>`); } };
+    $("#ed-del").onclick = async () => { if (await askConfirm(`从词库删除「${w.word}」？\n该词的错题记录与掌握进度会一并删除，可用「撤销上次改动」恢复。`, { okText: "删除", danger: true })) { Store.snapshot(); Store.remove(w.id); Quiz.forgetScope(null); closeModal(); renderLibrary(); renderWrongbook(); renderProgress(); renderScope(); renderStrip(); toast(`已删除 <b>${esc(w.word)}</b>`); } };
     $("#ed-one").onclick = () => app.aiOne(w);
     $("#modal-save").onclick = () => {
       const senses = Parse.text($("#ed-senses").value.split("\n").map((l) => `${$("#ed-word").value}\t${l}`).join("\n")).candidates[0];
@@ -763,6 +764,99 @@ const UI = (() => {
     btn.textContent = "保存"; btn.classList.remove("danger"); btn.onclick = null;
   }
 
+  /* ---------- 页内确认 / 输入弹层 ----------
+   * 为什么不用 window.confirm / window.prompt：
+   * ArkWeb（鸿蒙 Web 组件）文档明确「当前，ArkWeb 暂未提供默认的应用弹框」，
+   * 且「如果应用忽略了页面内的对话框，那么返回值总是 false」——
+   * 也就是说只补容器不补网页的话，鸿蒙上每一次删除都会被静默拒绝、
+   * 每一次新建单元/课次都会拿到 null 而退回原选项。
+   * 放在页内则两端都成立；鸿蒙包里的 www/ 与安卓包逐字节相同，
+   * 所以安卓真机的断言等于替鸿蒙验过，而我写的 ArkTS 一行也验不了。
+   */
+  let askJob = null;                              // 当前挂起的弹层（含 resolve）
+  const askQueue = [];                            // 同时来两个确认时必须排队，不能把第一个的答案冲掉
+  function paintAsk(job) {
+    askJob = job;
+    $("#qbox-msg").textContent = job.message;     // 只走 textContent：消息里可能含用户输入的词形
+    const inp = $("#qbox-input");
+    inp.classList.toggle("hidden", !job.input);
+    inp.value = job.value || "";
+    const ok = $("#qbox-ok");
+    ok.textContent = job.okText || "确定";
+    ok.classList.toggle("danger", !!job.danger);
+    $("#qbox").classList.remove("hidden");
+    if (job.input) setTimeout(() => { inp.focus(); inp.select(); }, 40);
+  }
+  function settleAsk(val) {
+    if (!askJob) return;
+    const job = askJob; askJob = null;
+    $("#qbox").classList.add("hidden");
+    const next = askQueue.shift();
+    if (next) paintAsk(next);                     // 先开下一个，再结算上一个
+    job.resolve(val);
+  }
+  function ask(spec) {
+    return new Promise((resolve) => {
+      const job = Object.assign({}, spec, { resolve });
+      if (askJob) askQueue.push(job); else paintAsk(job);
+    });
+  }
+  let askBound = false;
+  function bindAsk() {
+    if (askBound) return;                         // 绑两次＝一次按键结算两次
+    const box = $("#qbox");
+    if (!box) return;                             // 无 DOM 的测试环境里不炸
+    askBound = true;
+    const accept = () => settleAsk(askJob && askJob.input ? $("#qbox-input").value : true);
+    $("#qbox-ok").onclick = accept;
+    $("#qbox-cancel").onclick = () => settleAsk(null);
+    box.onclick = (e) => { if (e.target === box) settleAsk(null); };   // 点遮罩 = 取消
+    // 按键只在下面这一处结算。输入框里不再单独挂 Enter：
+    // document 捕获层比元素自身处理器先跑，两处都结算的话，队列里排着的下一个弹层会被误当成答案吃掉。
+    document.addEventListener("keydown", (e) => {
+      if (!askJob) return;
+      // 弹层开着时按键只归弹层：否则回车确认删除会顺带把背后的测验推进到下一题
+      e.stopPropagation();
+      if (e.key === "Escape") { e.preventDefault(); settleAsk(null); }
+      else if (e.key === "Enter") { e.preventDefault(); accept(); }
+    }, true);                                     // 捕获阶段：抢在答题快捷键前面
+  }
+  // 语义对齐原生：确认→true，取消/关闭→false；返回 Promise
+  function askConfirm(message, opts) {
+    return ask(Object.assign({}, opts || {}, { message, input: false })).then((v) => v === true);
+  }
+  // 语义对齐原生：确定→字符串（可能是空串），取消→null
+  function askPrompt(message, def, opts) {
+    return ask(Object.assign({}, opts || {}, { message, input: true, value: def == null ? "" : String(def) }))
+      .then((v) => (v === true || v === null || v === undefined) ? null : String(v));
+  }
+
+  /* ---------- 鸿蒙容器的下载兜底 ----------
+   * ArkWeb 里 <a download> 的产物默认落进应用私有目录，文档写明「用户无法查看」。
+   * 备份是本 App 唯一的跨设备迁移动作，所以容器是鸿蒙时额外把文本摊开让用户复制。
+   */
+  function isArkWeb() {
+    return /OpenHarmony|ArkWeb|HarmonyOS/i.test((typeof navigator !== "undefined" && navigator.userAgent) || "");
+  }
+  function openCopyBox(title, text, hint) {
+    $("#modal-title").textContent = title;
+    $("#modal-body").innerHTML =
+      `<div class="field"><label>${esc(hint)}</label><textarea id="cp-text" rows="9" readonly>${esc(text)}</textarea></div>`;
+    $("#modal").classList.remove("hidden");
+    const btn = $("#modal-save");
+    btn.textContent = "复制到剪贴板"; btn.classList.remove("danger");
+    btn.onclick = async () => {
+      const ta = $("#cp-text");
+      let done = false;
+      try { await navigator.clipboard.writeText(ta.value); done = true; } catch (e) { /* 落到下面的选中复制 */ }
+      if (!done) {
+        try { ta.focus(); ta.select(); done = !!(document.execCommand && document.execCommand("copy")); } catch (e) { done = false; }
+      }
+      closeModal();
+      toast(done ? "已复制备份，粘到备忘录或存成 <b>.json</b> 即可" : "复制失败，请长按文本框全选后手动复制", !done);
+    };
+  }
+
   /* ---------- 设置抽屉 ---------- */
   function renderTypeChecks() {
     $("#type-checks").innerHTML = Object.keys(Quiz.TYPES).map((t) => {
@@ -796,6 +890,7 @@ const UI = (() => {
     $("#set-ai-base").value = s.ai.baseURL || "";
     $("#set-ai-model").value = s.ai.model || "";
     $("#set-ai-key").value = s.ai.key || "";
+    $("#set-ai-timeout").value = AI.timeoutSec();     // 回显生效值，不是原始字符串：写 3 和写 900 都会被收敛
     const u = Store.usage();
     $("#storage-info").innerHTML = `本机已存 ${u.words} 词，约 ${u.kb} KB（localStorage 上限一般 5 MB）。导出 JSON 可跨设备迁移，导入时同样走合并去重；备份里的学习进度会带回，本机练得更多的不会被覆盖。`;
     syncUndoBtn();          // 不再在这里写 disabled，统一走同一个入口
@@ -816,6 +911,6 @@ const UI = (() => {
   const SORT_LABEL = { default: "默认", priority: "错题权重", word: "字母" };
   function cycleSort() { libSort = SORTS[(SORTS.indexOf(libSort) + 1) % SORTS.length]; renderLibrary(); return SORT_LABEL[libSort]; }
 
-  return { $, $$, esc, toast, renderProgress, renderMode, renderSeqBar, renderPlanSeg, renderPins, bindPins, renderStrip, showGate, renderQuestion, renderFeedback, renderLibrary, renderRecite, bindRecite, renderPreview, commit, renderWrongbook, renderScope, openEditor, closeModal, askScopeDelete, scopeShown, fillSettings, renderTypeChecks, speak, emptyStage, TYPE_LABEL, PLAN_LABEL, cycleSort, sortLabel: () => SORT_LABEL[libSort] };
+  return { $, $$, esc, toast, renderProgress, renderMode, renderSeqBar, renderPlanSeg, renderPins, bindPins, renderStrip, showGate, renderQuestion, renderFeedback, renderLibrary, renderRecite, bindRecite, renderPreview, commit, renderWrongbook, renderScope, openEditor, closeModal, askScopeDelete, scopeShown, fillSettings, renderTypeChecks, speak, emptyStage, TYPE_LABEL, PLAN_LABEL, cycleSort, bindAsk, askConfirm, askPrompt, isArkWeb, openCopyBox, sortLabel: () => SORT_LABEL[libSort] };
 })();
 if (typeof window !== "undefined") window.UI = UI;

@@ -149,7 +149,7 @@ python -m http.server 8080 -d www
 仓库带了一个设备冒烟测试（MuMu 实测，Android 15 / x86_64 / 1080×1920）：
 
 ```powershell
-node _tools\device-smoke.mjs --shots        # 21 条断言，全程真实点击
+node _tools\device-smoke.mjs --shots        # 26 条断言，全程真实点击
 node _tools\device-smoke.mjs --selftest     # 负向对照：确认这套检查真的会失败
 ```
 

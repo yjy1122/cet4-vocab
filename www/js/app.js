@@ -133,16 +133,37 @@ const app = (() => {
     return Store.words.filter((w) => !w.enriched).slice(0, 20);
   }
 
+  let aiBusy = false;
+  function aiStatus(html, cls) {
+    const z = $("#ai-zone");
+    if (z) z.innerHTML = `<p class="ai-status ${cls || ""}">${html}</p>`;
+  }
   async function aiDirect(list) {
-    list = list && list.length ? list : aiTargetList();
+    if (aiBusy) return UI.toast("上一次调用还没结束，先看「录入」页的状态。", true);
+    list = (Array.isArray(list) && list.length) ? list : aiTargetList();
     if (!list.length) return UI.toast("当前没有「缺音标/例句」的词；如需重新补全，请在词条里清空字段或手动指定。", true);
+    // 结果画在「录入」页的预览区里。不切过去就是"点了没反应"的头号成因：
+    // 词库单元卡上的「补全 N 项」也走这里，用户当时人还在词库页。
+    switchView("ingest");
+    const sec = AI.timeoutSec();
+    aiBusy = true;
+    aiStatus(`正在调用端点补全 <b>${list.length}</b> 词…（最长等 ${sec} 秒，超时会中断并说明原因）`, "run");
     UI.toast("正在调用端点补全 " + list.length + " 词…");
     try {
       const res = await AI.enrichDirect(list.map((w) => ({ word: w.word, definition: w.definition, senses: w.senses })));
-      if (!res.candidates.length) return UI.toast("模型没返回词条。", true);
+      if (!res.candidates.length) {
+        aiStatus("端点回应了，但回复里没有 words 数组——多半是模型没按契约只输出 JSON。可改用「复制粘贴桥」再粘一次。", "bad");
+        return UI.toast("模型没返回词条。", true, 6000);
+      }
+      aiStatus(`✅ 端点返回 ${res.candidates.length} 词，已在下方生成入库预览（确认后才写库）。`, "ok");
       UI.renderPreview(Store.plan(res.candidates, "merge"));
       $("#pv-summary").insertAdjacentHTML("beforeend", `<span class="tag acc">AI 补全结果：确认后将只填空缺字段</span>`);
-    } catch (e) { UI.toast(UI.esc(e.message), true, 6000); }
+    } catch (e) {
+      aiStatus("❌ " + UI.esc(e.message) + ' <button class="ghost" id="ai-fallback">改用复制粘贴桥</button>', "bad");
+      const fb = $("#ai-fallback");
+      if (fb) fb.onclick = () => aiBridge(list);
+      UI.toast(UI.esc(e.message), true, 8000);
+    } finally { aiBusy = false; }
   }
 
   function aiBridge(prefList) {
@@ -168,17 +189,21 @@ const app = (() => {
   }
 
   async function aiOne(w) {
+    if (aiBusy) return UI.toast("上一次调用还没结束（看「录入」页的状态）。", true);
+    aiBusy = true;
+    UI.toast(`正在补全 ${w.word}…（最长 ${AI.timeoutSec()} 秒）`);
     try {
       const res = await AI.enrichDirect([w]);
       const got = res.candidates[0];
-      if (!got) return UI.toast("模型没返回内容。", true);
+      if (!got) return UI.toast("模型没返回内容。", true, 6000);
       Store.update(w.id, {
         phonetic: got.phonetic || w.phonetic, collocation: got.collocation || w.collocation,
         example_en: got.example_en || w.example_en, example_zh: got.example_zh || w.example_zh,
       });
       UI.closeModal(); UI.renderLibrary(); UI.renderProgress();
       UI.toast(`已补全 <b>${UI.esc(w.word)}</b>`);
-    } catch (e) { UI.toast(UI.esc(e.message), true); }
+    } catch (e) { UI.toast(UI.esc(e.message), true, 8000); }
+    finally { aiBusy = false; }
   }
 
   function intentExtract() {
@@ -385,6 +410,7 @@ const app = (() => {
     $("#btn-settings").onclick = () => { UI.fillSettings(); $("#drawer").classList.remove("hidden"); $("#drawer-mask").classList.remove("hidden"); };
     $("#btn-close-drawer").onclick = $("#drawer-mask").onclick = () => { $("#drawer").classList.add("hidden"); $("#drawer-mask").classList.add("hidden"); };
     $("#modal-close").onclick = $("#modal-cancel").onclick = UI.closeModal;
+    UI.bindAsk();                                 // 页内确认/输入弹层（鸿蒙没有默认 JS 弹框）
 
     $("#btn-continue").onclick = continueLearning;
     $("#btn-qbar").onclick = () => {
@@ -421,7 +447,7 @@ const app = (() => {
     $("#btn-pv-discard").onclick = () => { $("#preview-panel").hidden = true; UI.commit(); UI.toast("已丢弃本次预览"); };
     $("#ingest-file").onchange = onFile;
     $("#ingest-image") && ($("#ingest-image").onchange = onImage);
-    $("#btn-ai-direct").onclick = aiDirect;
+    $("#btn-ai-direct").onclick = () => aiDirect();     // 不能直接把 aiDirect 交给 onclick：那样第一个实参是 Event 对象
     $("#btn-ai-bridge").onclick = aiBridge;
     $("#btn-intent-open").onclick = intentExtract;
     $("#btn-undo-import").onclick = () => {
@@ -443,8 +469,8 @@ const app = (() => {
     $("#lib-status").onchange = () => UI.renderLibrary();
     $("#btn-del-unit").onclick = () => { const u = $("#lib-unit").value; if (u) UI.askScopeDelete("unit", u); };
 
-    $("#btn-wb-clear").onclick = () => {
-      if (!confirm("清空全部错题记录（词条本身保留，状态回到待测）？")) return;
+    $("#btn-wb-clear").onclick = async () => {
+      if (!(await UI.askConfirm("清空全部错题记录（词条本身保留，状态回到待测）？", { okText: "清空", danger: true }))) return;
       Store.words.forEach((w) => { if (w.status === "wrong") { w.status = "new"; w.srs.wrongReason = ""; w.srs.correctTypes = []; w.srs.weight = 0; } });
       Store.save(); UI.renderWrongbook(); UI.renderProgress(); UI.toast("已清空错题本");
     };
@@ -481,17 +507,30 @@ const app = (() => {
     $("#set-ai-base").onchange = (e) => { Store.setSetting("ai.baseURL", e.target.value.trim()); resetProbe(); };
     $("#set-ai-model").onchange = (e) => Store.setSetting("ai.model", e.target.value.trim());
     $("#set-ai-key").onchange = (e) => { Store.setSetting("ai.key", e.target.value.trim()); resetProbe(); };
+    $("#set-ai-timeout").onchange = (e) => {
+      const n = Math.min(600, Math.max(10, +e.target.value || 90));
+      Store.setSetting("ai.timeout", n);
+      e.target.value = n;                                  // 立刻回显被收敛后的值，别让人以为填生效了
+      UI.toast(`AI 单次请求上限 ${n} 秒`);
+    };
 
     $("#btn-export").onclick = () => {
-      const blob = new Blob([Store.exportJSON()], { type: "application/json" });
+      const text = Store.exportJSON();
+      const name = `noadic-备份-${new Date().toISOString().slice(0, 10)}.json`;
+      const blob = new Blob([text], { type: "application/json" });
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
-      a.download = `noadic-备份-${new Date().toISOString().slice(0, 10)}.json`;
+      a.download = name;
       a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+      // 鸿蒙容器里 <a download> 的产物落进应用私有目录，用户看不到也拿不到（ArkWeb 文档明确）。
+      // 所以额外摊开一份文本让他复制走——备份是本 App 唯一的跨设备迁移动作。
+      if (UI.isArkWeb()) {
+        UI.openCopyBox("复制这份备份", text, `鸿蒙容器里下载的文件不会出现在你能打开的位置。按下面的文件名存好即可：${name}`);
+      }
     };
     $("#btn-import").onchange = onFile;
-    $("#btn-wipe").onclick = () => {
-      if (!confirm("彻底清空词库与进度？建议先导出 JSON。")) return;
+    $("#btn-wipe").onclick = async () => {
+      if (!(await UI.askConfirm("彻底清空词库与进度？建议先导出 JSON。", { okText: "全部清空", danger: true }))) return;
       Store.wipe(); UI.renderProgress(); UI.renderLibrary(); UI.renderWrongbook(); UI.renderScope(); next();
       UI.toast("已清空，可去「录入」重新导入");
     };
@@ -523,7 +562,8 @@ const app = (() => {
     }
     // PWA：只在浏览器 http(s) 下注册 SW。Capacitor 壳里资源已是原生打包的，
     // 再套一层 SW 缓存会在 App 更新后继续吐旧 JS（白屏／改了没生效的经典成因）。
-    const inNativeApp = !!window.Capacitor || /^capacitor:/i.test(location.protocol);
+    // 鸿蒙 ArkWeb 里资源同样是只读打包进 HAP 的（resource:// 协议），一样不该套 SW。
+    const inNativeApp = !!window.Capacitor || /^capacitor:/i.test(location.protocol) || UI.isArkWeb();
     if (!inNativeApp && location.protocol !== "file:" && "serviceWorker" in navigator) {
       navigator.serviceWorker.register("sw.js").catch(() => { });
     }

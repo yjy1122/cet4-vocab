@@ -75,19 +75,37 @@ const AI = (() => {
   }
 
   /* ---------- ③ 直连端点 ---------- */
+  /* 单次请求的墙钟上限（秒）。没有它，端点不通/模型慢就会让界面永远停在
+     "正在调用…"——用户看到的"点了没反应"其实是这里，不是没发请求。 */
+  function timeoutSec() {
+    const n = Number(cfg().timeout);
+    // 收敛而不是回退：填 3 秒的人要的是"快点失败"，直接跳到 90 反而违背他的意思
+    if (!Number.isFinite(n) || n <= 0) return 90;
+    return Math.min(600, Math.max(10, Math.round(n)));
+  }
+
   async function chat(messages, opts) {
     const c = cfg();
     if (!available()) throw new Error("未配置 AI 端点：在「设置 → AI 端点」填 Base URL 与 Key，或改用「复制粘贴桥」。");
     const url = c.baseURL.replace(/\/+$/, "") + "/chat/completions";
+    const sec = timeoutSec();
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), sec * 1000);
     let res;
     try {
       res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: "Bearer " + c.key },
+        signal: ctrl.signal,
         body: JSON.stringify({ model: c.model || "gpt-4o-mini", temperature: 0.2, messages, response_format: (opts || {}).json !== false ? { type: "json_object" } : undefined }),
       });
     } catch (e) {
+      if (e && (e.name === "AbortError" || ctrl.signal.aborted)) {
+        throw new Error(`端点 ${sec} 秒内没有响应，已中断等待。本地模型（Ollama 等）首次加载权重可能超时——把「设置 → AI 端点 → 超时」调大，或改用「复制粘贴桥」。`);
+      }
       throw new Error("请求没能发出（多为浏览器 CORS 拦截或网络不通）。端点示例：Ollama 等本地服务一般允许跨域；云端请改用「复制粘贴桥」。原始信息：" + e.message);
+    } finally {
+      clearTimeout(timer);
     }
     if (!res.ok) throw new Error("端点返回 " + res.status + "：" + (await res.text()).slice(0, 200));
     const j = await res.json();
@@ -197,7 +215,7 @@ const AI = (() => {
         msg: "请求没能发出：多为浏览器/WebView 的 CORS 拦截或网络不通（" + ((e && e.message) || e) + "）。云端 API 通常不放行跨域 —— 可用「复制粘贴桥」，或改指本地服务（Ollama 等）。" };
     }
   }
-  return { SPEC, available, extractIntent, bridgePrompt, chat, parseContract, enrichDirect, fromImage, toContract, STOP, probe, classify };
+  return { SPEC, available, extractIntent, bridgePrompt, chat, parseContract, enrichDirect, fromImage, toContract, STOP, probe, classify, timeoutSec };
 })();
 
 /* ---------- Mode 3 写作批改（离线可用，AI 可选增强） ---------- */
