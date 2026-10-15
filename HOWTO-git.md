@@ -170,7 +170,7 @@ CI 会自动出正式 Release；日常 push 则覆盖 `latest-debug` 这个滚�
 ## 6. 提交前自检（本机跑，不用等 CI）
 
 ```powershell
-node _tools/test-logic.mjs                                   # 242 项逻辑测试
+node _tools/test-logic.mjs                                   # 244 项逻辑测试
 node _tools/audit-wiring.mjs                                 # JS 语法 + #id 选择器对账
 node _tools/xref.mjs                                         # 跨模块引用对账（536 处）
 bash _tools/notes-extract.sh                                 # 发布说明抽取（正/负两组）
@@ -178,7 +178,7 @@ powershell -ExecutionPolicy Bypass -File _tools\check-workflow.ps1 -SelfTest
                                                              # workflow 结构 + 每个 run 块 bash -n + 6 种破坏必须全被抓
 powershell -ExecutionPolicy Bypass -File _tools\check-readme-links.ps1
                                                              # README 链接；徽标读的是 shields 渲染出的 aria-label，不是 HTTP 200
-node _tools/device-smoke.mjs --shots                         # 有模拟器/真机时：21 条真实点击断言
+node _tools/device-smoke.mjs --shots                         # 有模拟器/真机时：26 条真实点击断言
 node _tools/device-smoke.mjs --selftest                      # 负向对照：假断言必须被判失败
 python _tools\apk-peek.py dist\noadic-debug.apk www          # 包内资源与 www/ 逐文件 SHA 对账
 ```
