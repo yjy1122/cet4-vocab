@@ -53,6 +53,12 @@ APK 一律从 [Releases](https://github.com/yjy1122/noadic/releases) 取：`late
 
 ### 修复
 
+- **「测试连接」以前只看 `GET /models`，永远不碰生成通道** —— 于是"连通 ✅"是可以骗人的。
+  DeepSeek 就是活例子：`/models` 秒回 200，而 chat 被跨域拦死 / 回 503，探测却报通过。
+  现在取到模型列表后会**再真打一次最小 chat**，两者都过才算通过；不通就明确说
+  「能取到模型列表，但生成通道不通…请改用复制粘贴桥」。这次试探自带上限（不超过 25 秒），
+  否则探测自己会被 DeepSeek 那种 200 + keep-alive 挂死。
+  真机对照验证：同一端点 `/models` 200、chat 503 时，探测判为 `kind=generate` 并给出原因（旧代码会报 ✅）。
 - **本地 AI 端点（Ollama 等）在 App 里连不上**：填 `http://localhost:11434/v1` 只会得到 `Failed to fetch`。
   拦它的不是 CORS，而是 **Android 9+ 默认禁止明文 http**——这一层在 WebView 的 `allowMixedContent` 之下，
   所以只开混合内容仍然不通。现在构建时会把 `android:usesCleartextTraffic="true"` 幂等写进 `AndroidManifest.xml`
