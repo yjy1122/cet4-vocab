@@ -661,18 +661,47 @@ const TEST = String.raw`
     const realFetch = globalThis.fetch;
     Store.settings.ai = { baseURL: "https://test.local/v1", model: "noadic-mini", key: "sk-x" };
     const mk = (status, body) => ({ ok: status === 200, status, json: async () => body, text: async () => JSON.stringify(body) });
+    /* 探测现在会走两个端点：/models 与 /chat/completions。
+       mock 必须按 URL 分流，否则"生成通道"永远拿不到 choices，
+       测出来的是 mock 太懒，不是代码错。 */
+    const route = (modelsRes, chatRes) => async (u) => (/\/models$/.test(u) ? modelsRes : chatRes);
+    const chatOk = mk(200, { choices: [{ message: { content: "pong" } }] });
     const cases = [
-      ["401 鉴权", mk(401, { error: "bad key" }), "auth"],
-      ["404 路径", mk(404, {}), "path"],
-      ["429 限流", mk(429, {}), "quota"],
-      ["503 服务端", mk(503, {}), "server"],
-      ["200 模型列表", mk(200, { data: [{ id: "noadic-mini" }, { id: "gpt-4o" }] }), "ok"],
+      ["401 鉴权", mk(401, { error: "bad key" }), chatOk, "auth"],
+      /* 404：/models 不支持时探测会回退去试 chat。若 chat 也不通才叫"路径不对"；
+         要是 chat 通了，判成 ok 才是对的（这个端点只是不提供 /models）。 */
+      ["404 路径", mk(404, {}), mk(404, {}), "path"],
+      ["429 限流", mk(429, {}), chatOk, "quota"],
+      ["503 服务端", mk(503, {}), chatOk, "server"],
+      ["200 模型列表（且生成通道通）", mk(200, { data: [{ id: "noadic-mini" }, { id: "gpt-4o" }] }), chatOk, "ok"],
     ];
-    for (const [name, res, want] of cases) {
-      globalThis.fetch = async () => res;
+    for (const [name, mres, cres, want] of cases) {
+      globalThis.fetch = route(mres, cres);
       const r = await AI.probe();
       ok("W8 连通性分类 " + name, r.kind === want, JSON.stringify(r).slice(0, 130));
     }
+    /* W8b /models 404 但 chat 通：应判可用，而不是报"路径不对" */
+    globalThis.fetch = route(mk(404, {}), chatOk);
+    const r8b = await AI.probe();
+    ok("W8b /models 不支持但 chat 通时判可用", r8b.ok === true && r8b.kind === "ok", JSON.stringify(r8b).slice(0, 120));
+    /* W16 /models 通但生成通道不通 —— 这正是 DeepSeek 的真实表现，
+       旧代码只看 /models 就会报"连通 ✅"骗人。 */
+    globalThis.fetch = route(mk(200, { data: [{ id: "deepseek-flash" }] }), mk(503, { error: { message: "Service is too busy" } }));
+    const rg = await AI.probe();
+    ok("W16 /models 通但生成不通时判失败并指向桥", rg.kind === "generate" && rg.ok === false
+      && /生成通道不通/.test(rg.msg) && /复制粘贴桥/.test(rg.msg), String(rg.msg).slice(0, 110));
+    /* W17 生成通道挂死时探测自己必须有上限。
+       /models 必须正常返回：它不带 signal，一起挂住的话探测根本走不到 chat，测的就不是这条。 */
+    globalThis.fetch = (u, opt) => (/\/models$/.test(u)
+      ? Promise.resolve(mk(200, { data: [{ id: "m" }] }))
+      : new Promise((_r, rej) => {
+        if (opt && opt.signal) opt.signal.addEventListener("abort", () => { const e = new Error("aborted"); e.name = "AbortError"; rej(e); });
+      }));
+    const realST = globalThis.setTimeout;
+    globalThis.setTimeout = (fn) => realST(() => fn(), 5);        // 把探测的等待压到毫秒级，别真等 25 秒
+    const rh = await AI.probe();
+    globalThis.setTimeout = realST;
+    ok("W17 生成通道挂死时探测被自己的上限中断，不永挂", rh.kind === "generate" && /超时中断|没有响应/.test(rh.msg), String(rh.msg).slice(0, 110));
     globalThis.fetch = async () => { throw new TypeError("Failed to fetch"); };
     const rn = await AI.probe();
     ok("W9 网络/CORS 失败单独分类并指向替代通道", rn.kind === "network" && /CORS/.test(rn.msg), String(rn.msg).slice(0, 70));

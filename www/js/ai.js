@@ -183,6 +183,27 @@ const AI = (() => {
     return { ok: false, kind: "http", ms, msg: `HTTP ${status}` + (body ? `：${String(body).slice(0, 160)}` : "") };
   }
 
+  /* 最小一次生成试探。必须自带超时：DeepSeek 实测会回 200 + keep-alive 永不给 body，
+     不设上限的话"测试连接"自己就会挂死在那里。 */
+  async function chatPing(base, H, c, budgetMs) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), budgetMs);
+    try {
+      const r = await fetch(base + "/chat/completions", {
+        method: "POST", headers: H, signal: ctrl.signal,
+        body: JSON.stringify({ model: c.model || "gpt-4o-mini", messages: [{ role: "user", content: "ping" }], max_tokens: 1 }),
+      });
+      const body = await r.text().catch(() => "");
+      let j = null; try { j = JSON.parse(body); } catch (e) { }
+      if (j && j.error) return { ok: false, status: r.status, body: (j.error.message || JSON.stringify(j.error)).slice(0, 140) };
+      const hasContent = !!(j && j.choices && j.choices[0]);
+      return { ok: r.ok && hasContent, status: r.status, body: r.ok ? (hasContent ? "" : "返回体里没有 choices") : body.slice(0, 140) };
+    } catch (e) {
+      const aborted = e && (e && e.name === "AbortError" || ctrl.signal.aborted);
+      return { ok: false, status: 0, body: aborted ? `超时中断（${Math.round(budgetMs / 1000)} 秒内没有响应）` : String((e && e.message) || e) };
+    } finally { clearTimeout(timer); }
+  }
+
   async function probe() {
     const c = cfg();
     const t0 = Date.now();
@@ -196,7 +217,20 @@ const AI = (() => {
     if (res) {
       let data = null; try { data = await res.json(); } catch (e) { }
       const ids = ((data && (data.data || data.models || data.result)) || []).map((m) => m && (m.id || m.name || m)).filter((x) => typeof x === "string");
-      if (res.ok) return classify(res.status, "", Date.now() - t0, ids, "models");
+      if (res.ok) {
+        /* 关键：/models 通**不等于**能补全。DeepSeek 实测 /models 秒回 200，
+           而 chat 被跨域拦死；只看前者就会报"连通 ✅"骗人。
+           所以取到列表后必须再真打一次生成通道，两者都过才算通过。 */
+        const cls = classify(res.status, "", Date.now() - t0, ids, "models");
+        const ping = await chatPing(base, H, c, Math.min(timeoutSec() * 1000, 25000));
+        if (ping.ok) return Object.assign(cls, { ms: Date.now() - t0, msg: cls.msg + "；生成通道也通了" });
+        return {
+          ok: false, kind: "generate", ms: Date.now() - t0,
+          msg: `能取到模型列表（${ids.length} 个），但生成通道不通`
+            + (ping.status ? `（HTTP ${ping.status}：${ping.body}）` : `（${ping.body}）`)
+            + "。补全会失败——云端 API 多半是不放行跨域，请改用「复制粘贴桥」。",
+        };
+      }
       if (res.status === 404 || res.status === 405) {   // 有些端点不提供 /models，改用一次最小 chat
         try {
           const r2 = await fetch(base + "/chat/completions", {

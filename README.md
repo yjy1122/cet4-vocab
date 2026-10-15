@@ -11,7 +11,7 @@
 [![Build](https://img.shields.io/github/actions/workflow/status/yjy1122/noadic/android.yml?branch=main&label=%E4%BA%91%E6%9E%84%E5%BB%BA)](https://github.com/yjy1122/noadic/actions/workflows/android.yml)
 [![Release](https://img.shields.io/github/v/release/yjy1122/noadic?label=%E7%89%88%E6%9C%AC)](https://github.com/yjy1122/noadic/releases/latest)
 [![Download APK](https://img.shields.io/badge/download-APK_直接安装-2ea44f)](https://github.com/yjy1122/noadic/releases/download/latest-debug/app-debug.apk)
-[![Tests](https://img.shields.io/badge/%E5%9B%9E%E5%BD%92%E6%B5%8B%E8%AF%95-244%20%E9%A1%B9-brightgreen)](_tools/test-logic.mjs)
+[![Tests](https://img.shields.io/badge/%E5%9B%9E%E5%BD%92%E6%B5%8B%E8%AF%95-249%20%E9%A1%B9-brightgreen)](_tools/test-logic.mjs)
 [![Device](https://img.shields.io/badge/%E7%9C%9F%E6%9C%BA%E6%96%AD%E8%A8%80-26%20%E6%9D%A1-orange)](_tools/device-smoke.mjs)
 [![Changelog](https://img.shields.io/badge/%E6%9B%B4%E6%96%B0%E6%97%A5%E5%BF%97-1.3.0-blue)](CHANGELOG.md)
 ![Zero build](https://img.shields.io/badge/%E6%9E%84%E5%BB%BA%E6%AD%A5%E9%AA%A4-%E6%97%A0%E9%9C%80%E6%89%93%E5%8C%85%E5%99%A8-blueviolet)
@@ -115,7 +115,7 @@
 | 移动壳 | **Capacitor 6**（`@capacitor/cli/core/android`） | 唯一需要 Node 的环节，仅用于打包 |
 | 云构建 | **GitHub Actions** + `setup-java` / `setup-android` | push 即出 debug APK 并发布到 Release |
 | AI（可选） | 任意 **OpenAI 兼容**端点（含视觉模型）/ 复制粘贴桥 / 本地意图提取 | 三条通道，契约恒定；Key 只存本机 |
-| 质量 | Node `vm` 沙箱跑浏览器模块 + adb 驱动真机 | 244 项逻辑测试 + 26 条真机断言 + 静态接线审计 + 跨模块引用对账 |
+| 质量 | Node `vm` 沙箱跑浏览器模块 + adb 驱动真机 | 249 项逻辑测试 + 26 条真机断言 + 静态接线审计 + 跨模块引用对账 |
 
 **没有后端。** 全部逻辑与数据都在客户端；AI 调用是你主动配置的可选增强。
 
@@ -163,7 +163,11 @@ https://github.com/yjy1122/noadic/releases/download/latest-debug/app-debug.apk
 | Model | 模型名；拍照识别需**支持视觉**的模型 |
 | API Key | 仅存本机，不上传任何服务器 |
 
-填完点 **🔌 测试连接**，它返回**分类结论**而不是笼统的「失败」：`连通 ✅（123ms，发现 5 个模型）` / `鉴权失败（401）` / `404：Base URL 路径不对` / `429：限流或额度不足` / `请求没能发出：多为 CORS 拦截`（此时改用复制粘贴桥）/ `还没填 Base URL`。`/models` 不支持时自动退化成一次 `max_tokens:1` 的最小 chat 试探。
+填完点 **🔌 测试连接**，它返回**分类结论**而不是笼统的「失败」：`连通 ✅（123ms，发现 5 个模型；生成通道也通了）` / `能取到模型列表，但生成通道不通` / `鉴权失败（401）` / `404：Base URL 路径不对` / `429：限流或额度不足` / `请求没能发出：多为 CORS 拦截`（此时改用复制粘贴桥）/ `还没填 Base URL`。
+
+> **探测会真打一次生成通道。** 早期版本只看 `GET /models`，于是"连通 ✅"能骗人 —— DeepSeek 就是活例子：`/models` 秒回 200，而 chat 被跨域拦死。现在取到列表后还要发一次 `max_tokens:1` 的最小 chat（自带 ≤25 秒上限，否则探测自己会被"200 + keep-alive 永不返回"挂死），**两者都过才算通过**。
+>
+> **云端 API（含 DeepSeek / OpenAI）通常不放行浏览器跨域，所以在本 App 里直连必然失败** —— 请改用**复制粘贴桥**（离线可用，契约一致）。要直连就得有个允许跨域的入口：本地 Ollama / LM Studio，或自己架一层带 CORS 头的转发。本地 `http://` 端点所需的明文流量许可已由构建脚本自动写入 `AndroidManifest.xml`（Android 9+ 默认禁明文，只开 `allowMixedContent` 仍然连不上）。
 
 > **不配 key 会损失什么？** 只损失「AI 补全音标/例句/搭配」和「拍照识别」。去重、出题、判卷、错题闭环、顺序闯关、写作阅读联动全部照常工作 —— 它们不依赖网络。
 
@@ -178,7 +182,7 @@ https://github.com/yjy1122/noadic/releases/download/latest-debug/app-debug.apk
 ### 开发自检
 
 ```bash
-node _tools/test-logic.mjs            # 244 项端到端逻辑测试（在 Node vm 里把浏览器模块当无头环境跑）
+node _tools/test-logic.mjs            # 249 项端到端逻辑测试（在 Node vm 里把浏览器模块当无头环境跑）
 node _tools/audit-wiring.mjs          # JS 语法 + 全部 #id 选择器对账
 node _tools/xref.mjs                  # 跨模块引用对账（抓"开机即抛"的名字错）
 powershell -ExecutionPolicy Bypass -File _tools\check-workflow.ps1 -SelfTest
@@ -216,7 +220,7 @@ node _tools/device-smoke.mjs --shots  # 装了模拟器/真机时：26 条端到
 - [x] AI 连通性自检与失败分类
 - [x] 浅色 App 化界面、PWA、Capacitor APK、Actions 云构建 + Release 自动发布
 - [x] 真机端到端测试（adb + 无障碍树按文字定位，对旋转/分辨率免疫）与负向对照
-- [x] 244 项回归测试与四道静态审计
+- [x] 249 项回归测试与四道静态审计
 
 ### 计划中
 

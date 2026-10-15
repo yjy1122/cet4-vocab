@@ -170,7 +170,7 @@ CI 会自动出正式 Release；日常 push 则覆盖 `latest-debug` 这个滚�
 ## 6. 提交前自检（本机跑，不用等 CI）
 
 ```powershell
-node _tools/test-logic.mjs                                   # 244 项逻辑测试
+node _tools/test-logic.mjs                                   # 249 项逻辑测试
 node _tools/audit-wiring.mjs                                 # JS 语法 + #id 选择器对账
 node _tools/xref.mjs                                         # 跨模块引用对账（536 处）
 bash _tools/notes-extract.sh                                 # 发布说明抽取（正/负两组）
