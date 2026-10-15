@@ -1,6 +1,6 @@
 /* sw.js — 手机/离线挂载点（仅在 http(s) 下生效；file:// 打开时不注册）
  * 更新版本改 APP_VERSION，老缓存会被清掉。 */
-const APP_VERSION = "noadic-v5";   // v2=三级批量删除，v3=判定按钮换行修复+撤销按钮恒可点，v4=背诵页（遮罩 + 背不熟标记），v5=音标在 Android 上吐方框
+const APP_VERSION = "noadic-v6";   // v2=三级批量删除，v3=判定按钮换行修复+撤销按钮恒可点，v4=背诵页（遮罩 + 背不熟标记），v5=音标在 Android 上吐方框，v6=删除/新建改走页内弹层（鸿蒙无默认 JS 弹框）
 const SHELL = [
   "./", "./index.html", "./css/app.css", "./manifest.webmanifest", "./icon.svg",
   "./js/seed-words.js", "./js/lexicon.js", "./js/dict-extra.js", "./js/store.js",

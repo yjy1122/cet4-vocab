@@ -283,7 +283,11 @@
     <div class="field"><label for="set-ai-model">Model</label>
       <input id="set-ai-model" placeholder="gpt-4o-mini / deepseek-chat"></div>
     <div class="field"><label for="set-ai-key">API Key（仅存本机）</label>
-      <input id="set-ai-key" type="password" placeholder="sk-…"></div>    <div class="row probe-row">
+      <input id="set-ai-key" type="password" placeholder="sk-…"></div>
+    <div class="field"><label for="set-ai-timeout">单次请求超时（秒）</label>
+      <input id="set-ai-timeout" type="number" min="10" max="600" step="10" placeholder="90">
+      <span class="mini muted">本地模型首次加载权重慢，可以调到 300；到点会中断并告诉你原因，不会一直转。</span></div>
+    <div class="row probe-row">
       <button class="ghost" id="btn-ai-probe">🔌 测试连接</button>
       <span class="mini muted" id="ai-probe-out">未测试</span>
     </div>
@@ -307,6 +311,20 @@
 </div>
 
 <div id="toast" class="toast"></div>
+
+<!-- 页内确认/输入弹层。刻意不用 window.confirm/prompt：ArkWeb 不提供默认弹框，
+     应用侧不接回调时 confirm() 恒为 false、prompt() 恒为 null，
+     「删除」「新建单元/课次」会在鸿蒙上静默失效。 -->
+<div class="qbox hidden" id="qbox" role="dialog" aria-modal="true" aria-labelledby="qbox-msg">
+  <div class="qbox-box">
+    <div class="qbox-msg" id="qbox-msg"></div>
+    <input class="qbox-input hidden" id="qbox-input" type="text" autocomplete="off" aria-label="输入内容">
+    <div class="row end">
+      <button class="ghost" id="qbox-cancel">取消</button>
+      <button class="primary" id="qbox-ok">确定</button>
+    </div>
+  </div>
+</div>
 
 <!-- 数据在前；dict-extra 的索引依赖 Lex，故 lexicon 必须先于 dict-extra 加载 -->
 <script src="js/seed-words.js"></script>
