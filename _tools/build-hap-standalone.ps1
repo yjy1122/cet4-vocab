@@ -45,7 +45,11 @@ $cands = $cands | Where-Object { $_ } | Select-Object -Unique
 $tc = $cands | Where-Object { Test-Path (Join-Path $_ 'bin\hvigorw.bat') } | Select-Object -First 1
 if (-not $tc) {
   Write-Host "找不到 command-line-tools（判据：bin\hvigorw.bat 存在）。已试过这些位置：" -ForegroundColor Red
-  foreach ($c in $cands) { Write-Host ("    {0}  [{1}]" -f $c, $(if (Test-Path (Join-Path $c 'bin\hvigorw.bat')) { '有 hvigorw' } else { '无' }))) }
+  foreach ($c in $cands) {
+    $has = Test-Path (Join-Path $c 'bin\hvigorw.bat')
+    $tag = if ($has) { '有 hvigorw' } else { '无' }
+    Write-Host ("    {0}  [{1}]" -f $c, $tag)
+  }
   Die "把工具链目录用参数传进来即可：-Tools D:\path\to\command-line-tools`n     （解压 zip 后的顶层目录名是 command-line-tools，要指到它，不是指到 bin）"
 }
 $hvigor = Join-Path $tc 'bin\hvigorw.bat'
