@@ -287,6 +287,9 @@
     <div class="field"><label for="set-ai-timeout">单次请求超时（秒）</label>
       <input id="set-ai-timeout" type="number" min="10" max="600" step="10" placeholder="90">
       <span class="mini muted">本地模型首次加载权重慢，可以调到 300；到点会中断并告诉你原因，不会一直转。</span></div>
+    <div class="field"><label for="set-ai-batch">每批补全词数</label>
+      <input id="set-ai-batch" type="number" min="1" max="80" step="5" placeholder="20">
+      <span class="mini muted">全部缺补全的词会按这个大小分批跑完，不再只补前 20 个。批太大容易被模型输出到一半截断，太小则请求数与限流风险上升。</span></div>
     <div class="row probe-row">
       <button class="ghost" id="btn-ai-probe">🔌 测试连接</button>
       <span class="mini muted" id="ai-probe-out">未测试</span>

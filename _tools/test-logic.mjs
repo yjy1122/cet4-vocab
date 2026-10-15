@@ -1152,6 +1152,47 @@ const TEST = String.raw`
     APP_VERSION = "1.3.3";
   })();
 
+  /* ---------- B 分批补全（用户问"为什么只补 20 个词"） ---------- */
+  {
+    const many = [];
+    for (let i = 0; i < 534; i++) many.push({ word: "w" + i });
+    const cs = AI.chunk(many, 20);
+    ok("BA1 分批不丢词（534 词 / 每批 20 → 27 批，尾批 14）",
+      cs.length === 27 && cs[26].length === 14 && cs.reduce((n, c) => n + c.length, 0) === 534,
+      cs.length + " 批，尾批 " + cs[cs.length - 1].length);
+    ok("BA2 空表分批返回空数组", AI.chunk([], 20).length === 0);
+    ok("BA2b 批大小为 0 时按 1 处理，不静默吞掉内容",
+      AI.chunk([{ word: "a" }, { word: "b" }], 0).length === 2);
+    const t = (v) => { Store.settings.ai = { baseURL: "https://x/v1", key: "k", batch: v }; return AI.batchSize(); };
+    ok("BA3 批大小收敛（空→20、500→上限、3→3）",
+      t("") === 20 && t(500) === AI.MAX_PER_REQUEST && t(3) === 3, [t(""), t(500), t(3)].join(","));
+    Store.settings.ai = { baseURL: "", model: "", key: "" };
+  }
+  await (async function () {
+    /* 以前是 cands.slice(0, 40) 静默丢掉多余的词：传 50 个只发 40 个还不说，
+       和 4000 字符截断是同一类缺陷。现在必须明确报错。 */
+    Store.settings.ai = { baseURL: "https://test.local/v1", model: "m", key: "k" };
+    const rf = globalThis.fetch;
+    const mkOk = () => ({ ok: true, status: 200, json: async () => ({ choices: [{ message: { content: '{"words":[]}' } }] }), text: async () => "" });
+    let sent = 0, msg = "";
+    globalThis.fetch = async () => { sent++; return mkOk(); };
+    const over = [];
+    for (let i = 0; i < AI.MAX_PER_REQUEST + 10; i++) over.push({ word: "w" + i });
+    try { await AI.enrichDirect(over); msg = "没抛错，发出了 " + sent + " 次请求"; }
+    catch (e) { msg = e.message; }
+    ok("BA4 超出单批上限时明确报错，不再静默截断", sent === 0 && /分批|最多/.test(msg), msg.slice(0, 80));
+
+    /* 正好等于上限必须能过（防 off-by-one 把合法请求也拦掉） */
+    const exact = [];
+    for (let i = 0; i < AI.MAX_PER_REQUEST; i++) exact.push({ word: "e" + i });
+    let passed = false;
+    globalThis.fetch = async () => mkOk();
+    try { await AI.enrichDirect(exact); passed = true; } catch (e) { passed = e.message; }
+    globalThis.fetch = rf;
+    Store.settings.ai = { baseURL: "", model: "", key: "" };
+    ok("BA5 正好等于上限的请求不被误拦", passed === true, String(passed).slice(0, 70));
+  })();
+
   window.__RESULT__ = R;
 })();
 `;

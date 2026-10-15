@@ -135,42 +135,63 @@ const app = (() => {
   }
 
   /* ---------------- 录入：AI 通道 ---------------- */
-  /** 只挑「缺音标或缺例句」的词做补全，避免重复消耗 token */
+  /** 「缺音标或缺例句」的全部词。以前这里 .slice(0,20) 只取 20 个，
+   *  于是 512 个缺补全的词要点 26 次按钮 —— 上限不该由实现来定，交给分批。 */
   function aiTargetList() {
-    return Store.words.filter((w) => !w.enriched).slice(0, 20);
+    return Store.words.filter((w) => !w.enriched);
   }
 
-  let aiBusy = false;
+  let aiBusy = false, aiCancel = false;
   function aiStatus(html, cls) {
     const z = $("#ai-zone");
     if (z) z.innerHTML = `<p class="ai-status ${cls || ""}">${html}</p>`;
   }
+  /* 分批进度要能被中止：几百个词一次跑下去，端点中途挂了不能干等。 */
+  function aiProgress(done, total, batches, got) {
+    aiStatus(`正在补全：第 <b>${Math.min(batches + 1, Math.ceil(total / AI.batchSize()))}</b> 批 / 共 ${total} 词`
+      + `（已完成 ${done} 词，已拿到 ${got} 条）`
+      + ` <button class="ghost" id="ai-stop">停止</button>`, "run");
+    const s = $("#ai-stop");
+    if (s) s.onclick = () => { aiCancel = true; s.disabled = true; s.textContent = "正在停止…"; };
+  }
   async function aiDirect(list) {
-    if (aiBusy) return UI.toast("上一次调用还没结束，先看「录入」页的状态。", true);
+    if (aiBusy) return UI.toast("上一次调用还没结束（看「录入」页的状态）。", true);
     list = (Array.isArray(list) && list.length) ? list : aiTargetList();
     if (!list.length) return UI.toast("当前没有「缺音标/例句」的词；如需重新补全，请在词条里清空字段或手动指定。", true);
     // 结果画在「录入」页的预览区里。不切过去就是"点了没反应"的头号成因：
     // 词库单元卡上的「补全 N 项」也走这里，用户当时人还在词库页。
     switchView("ingest");
-    const sec = AI.timeoutSec();
-    aiBusy = true;
-    aiStatus(`正在调用端点补全 <b>${list.length}</b> 词…（最长等 ${sec} 秒，超时会中断并说明原因）`, "run");
-    UI.toast("正在调用端点补全 " + list.length + " 词…");
-    try {
-      const res = await AI.enrichDirect(list.map((w) => ({ word: w.word, definition: w.definition, senses: w.senses })));
-      if (!res.candidates.length) {
-        aiStatus("端点回应了，但回复里没有 words 数组——多半是模型没按契约只输出 JSON。可改用「复制粘贴桥」再粘一次。", "bad");
-        return UI.toast("模型没返回词条。", true, 6000);
-      }
-      aiStatus(`✅ 端点返回 ${res.candidates.length} 词，已在下方生成入库预览（确认后才写库）。`, "ok");
-      UI.renderPreview(Store.plan(res.candidates, "merge"));
-      $("#pv-summary").insertAdjacentHTML("beforeend", `<span class="tag acc">AI 补全结果：确认后将只填空缺字段</span>`);
-    } catch (e) {
-      aiStatus("❌ " + UI.esc(e.message) + ' <button class="ghost" id="ai-fallback">改用复制粘贴桥</button>', "bad");
+    const size = AI.batchSize(), batches = AI.chunk(list, size), total = list.length;
+    aiBusy = true; aiCancel = false;
+    const all = [];
+    let done = 0, failed = null;
+    for (let i = 0; i < batches.length; i++) {
+      if (aiCancel) { failed = { kind: "cancel" }; break; }
+      aiProgress(done, total, i, all.length);
+      try {
+        const res = await AI.enrichDirect(batches[i].map((w) => ({ word: w.word, definition: w.definition, senses: w.senses })));
+        all.push.apply(all, res.candidates);
+      } catch (e) { failed = { kind: "error", msg: e.message, at: done }; break; }
+      done += batches[i].length;
+    }
+    if (!all.length) {
+      if (failed && failed.kind === "cancel") aiStatus(`已停止，没有拿到结果。`, "bad");
+      else aiStatus("❌ " + UI.esc((failed && failed.msg) || "端点没有返回词条")
+        + ' <button class="ghost" id="ai-fallback">改用复制粘贴桥</button>', "bad");
       const fb = $("#ai-fallback");
       if (fb) fb.onclick = () => aiBridge(list);
-      UI.toast(UI.esc(e.message), true, 8000);
-    } finally { aiBusy = false; }
+      aiBusy = false;
+      return UI.toast(failed && failed.msg ? UI.esc(failed.msg) : "模型没返回词条。", true, 8000);
+    }
+    const head = failed
+      ? (failed.kind === "cancel"
+        ? `⏹ 已停止：完成 ${done}/${total} 词，拿到 ${all.length} 条（剩下的下次接着跑就行）`
+        : `⚠ 中断在第 ${Math.floor(done / size) + 1} 批：完成 ${done}/${total} 词，已拿到 ${all.length} 条。原因：${UI.esc(failed.msg)}`)
+      : `✅ 全部完成：${total} 词，拿到 ${all.length} 条`;
+    aiStatus(head + "，已在下方生成入库预览（确认后才写库）。", failed ? "bad" : "ok");
+    UI.renderPreview(Store.plan(all, "merge"));
+    $("#pv-summary").insertAdjacentHTML("beforeend", `<span class="tag acc">AI 补全结果：确认后将只填空缺字段</span>`);
+    aiBusy = false;
   }
 
   function aiBridge(prefList) {
@@ -387,7 +408,7 @@ const app = (() => {
 
   function fillUnit(unit) {
     const n0 = Store.backfill();                       // 先用内置离线词典免费补
-    const list = Store.words.filter((w) => !w.enriched && Store.unitKey(w) === unit).slice(0, 20);
+    const list = Store.words.filter((w) => !w.enriched && Store.unitKey(w) === unit);   // 不再截到 20：分批交给 aiDirect
     Quiz.invalidateEligible();
     UI.renderLibrary(); UI.renderProgress();
     if (n0) UI.toast(`内置词典已补齐 <b>${n0}</b> 个词的音标/例句`);
@@ -571,6 +592,12 @@ const app = (() => {
       Store.setSetting("ai.timeout", n);
       e.target.value = n;                                  // 立刻回显被收敛后的值，别让人以为填生效了
       UI.toast(`AI 单次请求上限 ${n} 秒`);
+    };
+    $("#set-ai-batch").onchange = (e) => {
+      const n = Math.min(AI.MAX_PER_REQUEST, Math.max(1, Math.round(+e.target.value) || 20));
+      Store.setSetting("ai.batch", n);
+      e.target.value = n;
+      UI.toast(`补全每批 ${n} 词，全部缺补全的词会分批跑完`);
     };
 
     $("#btn-export").onclick = () => {

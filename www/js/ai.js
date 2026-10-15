@@ -84,6 +84,14 @@ const AI = (() => {
     return Math.min(600, Math.max(10, Math.round(n)));
   }
 
+  /** 每批送多少个词。默认 20：一次要生成 IPA+搭配+例句+译文，批太大模型容易输出到一半截断，
+   *  批太小则请求数与限流风险上升。上限受 MAX_PER_REQUEST 约束。 */
+  function batchSize() {
+    const n = Number(cfg().batch);
+    if (!Number.isFinite(n) || n <= 0) return 20;
+    return Math.min(MAX_PER_REQUEST, Math.max(1, Math.round(n)));
+  }
+
   async function chat(messages, opts) {
     const c = cfg();
     if (!available()) throw new Error("未配置 AI 端点：在「设置 → AI 端点」填 Base URL 与 Key，或改用「复制粘贴桥」。");
@@ -139,8 +147,24 @@ const AI = (() => {
     return { candidates: cands, reply: obj.reply_message || "", has_words: !!obj.has_words };
   }
 
+  /** 切成不超过 n 个一批。抽成纯函数是为了能被测到：分批最容易丢尾批。 */
+  function chunk(list, n) {
+    const size = Math.max(1, Math.floor(n) || 1);
+    const out = [];
+    for (let i = 0; i < list.length; i += size) out.push(list.slice(i, i + size));
+    return out;
+  }
+
+  /* 单次请求的词数硬上限。超过就明确报错，
+     绝不再像以前那样 cands.slice(0, 40) 静默丢掉多余的词 ——
+     用户以为补全了 50 个，实际只发了 40 个，那和 4000 字符截断是同一类缺陷。 */
+  const MAX_PER_REQUEST = 80;
+
   async function enrichDirect(cands) {
-    const list = cands.slice(0, 40).map((c) => ({ word: c.word, 中文释义: c.definition || (c.senses || []).map((s) => s.meaning).join("；") }));
+    if (cands.length > MAX_PER_REQUEST) {
+      throw new Error(`一次最多送 ${MAX_PER_REQUEST} 词（当前 ${cands.length} 词），请分批调用。`);
+    }
+    const list = cands.map((c) => ({ word: c.word, 中文释义: c.definition || (c.senses || []).map((s) => s.meaning).join("；") }));
     const content = await chat([
       { role: "system", content: SPEC },
       { role: "user", content: "为下列单词补全 IPA/搭配/例句，中文释义保持原样，只输出 JSON：\n" + JSON.stringify(list) },
@@ -255,7 +279,7 @@ const AI = (() => {
         msg: "请求没能发出：多为浏览器/WebView 的 CORS 拦截或网络不通（" + ((e && e.message) || e) + "）。云端 API 通常不放行跨域 —— 可用「复制粘贴桥」，或改指本地服务（Ollama 等）。" };
     }
   }
-  return { SPEC, available, extractIntent, bridgePrompt, chat, parseContract, enrichDirect, fromImage, toContract, STOP, probe, classify, timeoutSec };
+  return { SPEC, available, extractIntent, bridgePrompt, chat, parseContract, enrichDirect, fromImage, toContract, STOP, probe, classify, timeoutSec, chunk, batchSize, MAX_PER_REQUEST };
 })();
 
 /* ---------- Mode 3 写作批改（离线可用，AI 可选增强） ---------- */

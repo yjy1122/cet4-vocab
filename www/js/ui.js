@@ -953,6 +953,7 @@ const UI = (() => {
     $("#set-ai-model").value = s.ai.model || "";
     $("#set-ai-key").value = s.ai.key || "";
     $("#set-ai-timeout").value = AI.timeoutSec();     // 回显生效值，不是原始字符串：写 3 和写 900 都会被收敛
+    $("#set-ai-batch").value = AI.batchSize();
     const u = Store.usage();
     $("#storage-info").innerHTML = `本机已存 ${u.words} 词，约 ${u.kb} KB（localStorage 上限一般 5 MB）。导出 JSON 可跨设备迁移，导入时同样走合并去重；备份里的学习进度会带回，本机练得更多的不会被覆盖。`;
     syncUndoBtn();          // 不再在这里写 disabled，统一走同一个入口
