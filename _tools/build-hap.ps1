@@ -51,17 +51,30 @@ if ($SkipAudit) {
 
 # ---------- 4. 找工具链 ----------
 Step 4 "定位 hvigorw"
-$cands = @(
-  (Join-Path $root 'harmony\hvigorw.bat'),
-  (Join-Path $root 'harmony\node_modules\.bin\hvigorw.cmd')
-)
-foreach ($extra in @($env:DEVECO_HOME, 'C:\Program Files\Huawei\DevEco Studio\tools', 'D:\Program Files\Huawei\DevEco Studio\tools')) {
-  if ($extra) { $cands += (Join-Path $extra 'hvigor\bin\hvigorw.js') }
+# 工具链默认往家目录写（~\.hvigor、~\.ohpm、pnpm store）。受限环境下这会 EPERM，
+# 而且把几百 MB 缓存留在系统盘也没道理 —— 全部收进工作区 .tooling\。
+$t = Join-Path $root '.tooling'
+foreach ($kv in @(@('HVIGOR_USER_HOME', 'hvigor-home'), @('OHPM_HOME', 'ohpm-home'),
+                  @('PNPM_HOME', 'pnpm-home'), @('npm_config_cache', 'npm-cache'))) {
+  $p = Join-Path $t $kv[1]
+  New-Item -ItemType Directory -Force -Path $p | Out-Null
+  Set-Item -Path "Env:\$($kv[0])" -Value $p
 }
-$cli = Get-ChildItem 'C:\','D:\' -Directory -ErrorAction SilentlyContinue |
-  Where-Object { $_.Name -match 'command-line-tools|DevEco' } |
-  ForEach-Object { Join-Path $_.FullName 'bin\hvigor\hvigorw.bat' }
-$cands += $cli
+Write-Host "     缓存/家目录重定向进 $t（不写 %USERPROFILE%）"
+# 真实入口是 command-line-tools\bin\hvigorw.bat（不是 hvigor\bin\hvigorw.js ——
+# 上一版按那个找永远找不到，等于这条发现逻辑从来没成立过）。
+$sub = @('bin\hvigorw.bat', 'hvigor\bin\hvigorw.js')
+$roots = @($env:DEVECO_HOME, $env:COMMANDLINE_TOOLS_HOME,
+           (Join-Path $root '.tooling\command-line-tools'),
+           'C:\Program Files\Huawei\DevEco Studio\tools', 'D:\Program Files\Huawei\DevEco Studio\tools')
+$cands = @((Join-Path $root 'harmony\hvigorw.bat'))
+foreach ($r2 in $roots) { if ($r2) { foreach ($s in $sub) { $cands += (Join-Path $r2 $s) } } }
+# 再扫盘根与常见下载/工具目录（只找 command-line-tools / DevEco 命名的）
+foreach ($drive in @('C:\', 'D:\')) {
+  Get-ChildItem $drive -Directory -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -match 'command-line-tools|DevEco' } |
+    ForEach-Object { foreach ($s in $sub) { $cands += (Join-Path $_.FullName $s) } }
+}
 $hvigor = $cands | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
 if (-not $hvigor) {
   Write-Host @"
