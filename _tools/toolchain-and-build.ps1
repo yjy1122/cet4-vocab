@@ -108,6 +108,27 @@ if ($gtxt -notmatch 'versionName "') { Die "build.gradle 里没有 versionName�
 [System.IO.File]::WriteAllText($gbat, ($gtxt -replace 'versionName ".*"', ('versionName "' + $pkgVer + '"')), (New-Object System.Text.UTF8Encoding($false)))
 Log "      versionName -> $pkgVer（与 package.json 对齐，不用 Set-Content 以免写出 BOM）"
 
+# 明文流量许可：Android 9+（targetSdk>=28）默认禁止 http，这一层在 WebView 的
+# allowMixedContent **之下**——只开混合内容仍然 Failed to fetch（实测）。
+# 不写进来的话，设置里推荐的「Ollama 等本地服务」在 App 里根本连不上。
+# android/ 不入库（由 cap add 生成），所以每次构建都要重新盖写。
+$man = Join-Path $root "android\app\src\main\AndroidManifest.xml"
+if (-not (Test-Path -LiteralPath $man)) { Die "找不到 $man，无法确认明文流量许可" }
+$mtxt = [System.IO.File]::ReadAllText($man)
+if ($mtxt -notmatch '<application') { Die "AndroidManifest.xml 里没有 <application>，模板变了" }
+if ($mtxt -notmatch 'usesCleartextTraffic') {
+  $mtxt = $mtxt -replace '<application', '<application
+        android:usesCleartextTraffic="true"'
+  [System.IO.File]::WriteAllText($man, $mtxt, (New-Object System.Text.UTF8Encoding($false)))
+  Log "      AndroidManifest 补上 usesCleartextTraffic=true（本地 http 端点需要）"
+} else {
+  Log "      AndroidManifest 已有 usesCleartextTraffic，跳过"
+}
+# 盖完必须回读确认：静默没写进去的话，症状是"AI 直连永远 Failed to fetch"，极难归因
+if (([System.IO.File]::ReadAllText($man)) -notmatch 'usesCleartextTraffic="true"') {
+  Die "usesCleartextTraffic 未真正写入 AndroidManifest.xml"
+}
+
 # 应用身份必须与 capacitor.config.json 一致：cap sync 只同步 www，**不会**把改过的
 # appId / appName 回写进已有的 android/ 工程（只有 cap add 生成时才写）。
 # 实测踩过：改名后本机出的包仍是 com.cet4.vocabengine / 「CET-4 词汇」，而 CI 从零

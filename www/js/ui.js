@@ -258,11 +258,43 @@ const UI = (() => {
     b.title = Store.canUndo() ? "回滚最近一次入库或批量删除" : "点一下尝试回滚（只保留最近一次入库或批量删除）";
   }
 
+  /* 词库渲染预算。
+     实测两种分布：3000 词集中在少数课次时，只限"每组行数"能从 97.7ms 降到 10.7ms；
+     但摊成 200 个小组时每组都不到上限，整表照样建 5.2 万节点、108ms——
+     所以必须再加一个**全表**预算，否则这个优化只对自己挑的形状有效。 */
+  const LIB_PAGE = 120;          // 单个分组一次渲染的行数
+  const LIB_TOTAL = 480;         // 整张列表一次渲染的总行数
+  const libExpanded = new Set(); // 已点过「继续显示」的分组
+  let libBudget = 0;             // 本次渲染已用掉的行数
+  let libDeferred = 0;           // 本次因全表预算被推迟的行数
+  let libShowAll = false;        // 点了「显示整张表」
+  let libSig = "";               // 筛选条件一变就作废，避免"上次展开了"污染这次的列表
+  /* 输出一个分组的行，并遵守两道预算。 */
+  function rowsOf(items, key) {
+    if (libShowAll || libExpanded.has(key)) return items.map(wordRow).join("");
+    const room = Math.max(0, LIB_TOTAL - libBudget);
+    const n = Math.min(items.length, LIB_PAGE, room);
+    libBudget += n;
+    if (items.length > n) libDeferred += items.length - n;
+    return items.slice(0, n).map(wordRow).join("")
+      + (items.length > n ? `<div class="lib-more"><button data-mact="more" data-mkey="${esc(key)}">继续显示剩余 ${items.length - n} 条（本组共 ${items.length}）</button></div>` : "");
+  }
+  /* 收尾：还有被推迟的行时，给一个"整张表都显示"的出口 */
+  function tailRow() {
+    if (!libDeferred || libShowAll) return "";
+    return `<div class="lib-more"><button data-mact="all">显示整张表（还有 ${libDeferred} 条未渲染）</button></div>`;
+  }
+
   function renderLibrary() {
     const kw = ($("#lib-search").value || "").trim().toLowerCase();
     const unit = $("#lib-unit").value;
     const st = $("#lib-status").value;
     libFilter = { kw, unit, st };
+    /* 签名带上词数：只按筛选条件重置的话，"上一本词表点了显示整张表"
+       会泄漏到下一本（实测被自己的验证脚本抓到：A 段点过全表，B 段的分组上限就失效了）。 */
+    const fsig = kw + "\u0000" + unit + "\u0000" + st + "\u0000" + Store.words.length;
+    if (fsig !== libSig) { libExpanded.clear(); libShowAll = false; libSig = fsig; }   // 换筛选条件或换一本表＝重置，别继承上次的展开状态
+    libBudget = 0; libDeferred = 0;
     syncUndoBtn();
     let list = Store.words.slice();
     if (unit) list = list.filter((w) => Store.unitKey(w) === unit);
@@ -289,7 +321,24 @@ const UI = (() => {
     }
 
     if (!list.length) { $("#lib-list").innerHTML = `<div class="empty">没有匹配的词。换个筛选条件，或去「录入」加词。</div>`; return bindLib(); }
-    if (!grouped) { $("#lib-list").innerHTML = `<div class="list">${sortList(list).map(wordRow).join("")}</div>`; return bindLib(); }
+
+    /* 分组用一遍扫描建索引。
+       原来每个课次都写 list.filter(w => Store.blockKey(w) === b.label)，
+       那是 O(组数 × 全表)：3000 词 / 100 个课次就是 30 万次 blockKey 调用，
+       实测整表重建从"应该几毫秒"变成 187ms。 */
+    const byBlock = new Map();
+    for (const w of list) {
+      const k = Store.blockKey(w);
+      let arr = byBlock.get(k);
+      if (!arr) { arr = []; byBlock.set(k, arr); }
+      arr.push(w);
+    }
+
+    if (!grouped) {
+      const all = sortList(list);
+      $("#lib-list").innerHTML = `<div class="list">${rowsOf(all, "__flat")}</div>` + tailRow();
+      return bindLib();
+    }
 
     /* 两级分组：Unit（外层）→ Lesson（内层）；没有课次时自动退回单层 */
     const collapsed = Store.settings.collapsed || {};
@@ -297,7 +346,7 @@ const UI = (() => {
     const groups = [];
     const seenU = new Map();
     for (const b of Store.blockFlags()) {
-      if (!list.some((w) => Store.blockKey(w) === b.label)) continue;
+      if (!byBlock.has(b.label)) continue;
       if (!seenU.has(b.unit)) { seenU.set(b.unit, groups.length); groups.push({ unit: b.unit, blocks: [] }); }
       groups[seenU.get(b.unit)].blocks.push(b);
     }
@@ -309,10 +358,10 @@ const UI = (() => {
       const u = uFlags[grp.unit] || { unit: grp.unit, total: 0, mastered: 0, new: 0, learning: 0, wrong: 0, unenriched: 0, pct: 0 };
       const uOpen = !collapsed[grp.unit];
       const hasLesson = grp.blocks.some((b) => b.lesson);
-      const shown = grp.blocks.reduce((n, b) => n + list.filter((w) => Store.blockKey(w) === b.label).length, 0);
+      const shown = grp.blocks.reduce((n, b) => n + ((byBlock.get(b.label) || []).length), 0);
       const inner = grp.blocks.map((b) => {
-        const items = sortList(list.filter((w) => Store.blockKey(w) === b.label));
-        if (!hasLesson) return items.map(wordRow).join("");
+        const items = sortList(byBlock.get(b.label) || []);
+        if (!hasLesson) return rowsOf(items, b.label);
         const bOpen = !collapsed[b.label];
         const mark = b.cleared ? "✓" : b.state === "active" ? "▶" : "○";
         return `<div class="lgroup ${b.state}${bOpen ? "" : " closed"}" data-block="${esc(b.label)}">
@@ -325,7 +374,7 @@ const UI = (() => {
             ${!b.cleared && b.needMore ? `<span class="tag">距达标还差 ${b.needMore}</span>` : ""}
             <span class="lg-acts"><button data-bact="drill">只练这课</button><button data-bact="del" class="danger" title="删除本课全部单词">删除本课</button></span>
           </div>
-          ${bOpen ? `<div class="list">${items.map(wordRow).join("")}</div>` : ""}
+          ${bOpen ? `<div class="list">${rowsOf(items, b.label)}</div>` : ""}
         </div>`;
       }).join("");
       return `<section class="ugroup" data-unit="${esc(grp.unit)}">
@@ -344,7 +393,7 @@ const UI = (() => {
         </header>
         ${uOpen ? `<div class="ugbody">${inner}</div>` : ""}
       </section>`;
-    }).join("");
+    }).join("") + tailRow();
     bindLib();
   }
 
@@ -394,6 +443,11 @@ const UI = (() => {
         Store.setSetting("collapsed", c); renderLibrary();
       } else if (act === "drill") app.visitBlock(label);
       else if (act === "del") askScopeDelete("lesson", label);
+    }));
+    /* 「继续显示剩余 N 条」/「显示整张表」：只在这一次会话里生效，切走筛选条件即作废（见 libSig） */
+    $$("#lib-list [data-mact]").forEach((b) => b.addEventListener("click", () => {
+      if (b.dataset.mact === "all") libShowAll = true; else libExpanded.add(b.dataset.mkey);
+      renderLibrary();
     }));
   }
 

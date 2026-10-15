@@ -3,7 +3,7 @@
   "appName": "noadic",
   "webDir": "www",
   "android": {
-    "allowMixedContent": false,
+    "allowMixedContent": true,
     "backgroundColor": "#ffffff",
     "appendUserAgent": "noadic-app",
     "webContentsDebuggingEnabled": true

@@ -464,7 +464,10 @@ const app = (() => {
       UI.renderLibrary();
       UI.toast(Store.settings.libGroup !== false ? "词库已按单元分组" : "词库已切换为平铺（顺序仍按书）");
     };
-    $("#lib-search").oninput = () => UI.renderLibrary();
+    /* 搜索防抖：整表重建在 3000 词时是百毫秒级，
+       逐键重建会让输入框看起来"吞字"。停 140ms 再渲染，手感与结果都不变。 */
+    let libDebounce = 0;
+    $("#lib-search").oninput = () => { clearTimeout(libDebounce); libDebounce = setTimeout(() => UI.renderLibrary(), 140); };
     $("#lib-unit").onchange = () => UI.renderLibrary();
     $("#lib-status").onchange = () => UI.renderLibrary();
     $("#btn-del-unit").onclick = () => { const u = $("#lib-unit").value; if (u) UI.askScopeDelete("unit", u); };
