@@ -17,6 +17,27 @@ APK 一律从 [Releases](https://github.com/yjy1122/noadic/releases) 取：`late
 
 ---
 
+## [1.3.1] - 2026-10-15
+
+**v1.3.0 的发布包缺一个修复**：明文流量许可只加进了本机构建脚本，没加进 CI workflow —— 于是从 Releases 下载的 APK 连不上本地 `http://` 端点（Ollama 等），而本机构建的却可以。已发布的标签不改写，所以走 1.3.1。
+
+### 修复
+
+- **两条构建路线又漂移了一次**（这次是我自己造成的）。`usesCleartextTraffic` 只写在 `_tools/toolchain-and-build.ps1` 里，CI 的 workflow 没有对应步骤。
+  收敛成**唯一实现** `_tools/prepare-android.mjs`：版本盖写、明文许可、应用身份核对、写后回读确认，本机与 CI 都调它。
+  这不是新逻辑，是把原来抄了两遍的 sed 合并成一份 —— 抄第二遍的那一刻就注定了下一次分叉。
+- `check-workflow.ps1` 加两条形状断言（workflow 必须跑 `prepare-android.mjs`、必须有 `cap sync`），并新增一条变异用例。
+  第一次写的时候作用域搞错了（`txt` 只是发布步骤那段脚本），导致**正常文件被误判**——被自己的自检抓出来的。
+  现在 7 条变异全被抓、正常文件放行。
+- `_tools/apk-peek.py` 的 sw 版本检查从写死字面量改为**与 `www/sw.js` 比对**。写死的话每次升缓存版本都会假失败，而假失败看多了真失败就没人看了。
+  双向验证过：当前包 `OK noadic-v7`，旧包 `FAIL 包内=noadic-v5 源码=noadic-v7` 并列出逐文件差异。
+
+### 变更
+
+- 缓存版本 `noadic-v6` → `noadic-v7`。
+
+---
+
 ## [1.3.0] - 2026-10-15
 
 为了让同一份 `www/` 在鸿蒙 ArkWeb 里也能正常干活，把「依赖浏览器原生弹框」的交互全部改成页内实现。安卓端行为不变，但底下换掉了。
@@ -199,7 +220,8 @@ APK 一律从 [Releases](https://github.com/yjy1122/noadic/releases) 取：`late
 
 ---
 
-[Unreleased]: https://github.com/yjy1122/noadic/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/yjy1122/noadic/compare/v1.3.1...HEAD
+[1.3.1]: https://github.com/yjy1122/noadic/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/yjy1122/noadic/compare/v1.2.1...v1.3.0
 [1.2.1]: https://github.com/yjy1122/noadic/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/yjy1122/noadic/compare/v1.1.0...v1.2.0

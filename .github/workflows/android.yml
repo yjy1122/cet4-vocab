@@ -50,18 +50,16 @@ jobs:
         continue-on-error: true
         run: npx --yes @capacitor/assets@3 generate --android
 
-      - name: 把 package.json 的版本写进 Android versionName
-        # Capacitor 的 android 模板把 versionName 硬编码成 "1.0"，cap add/sync 都
-        # 不会用 package.json 覆盖它（实测：package.json 已是 1.1.0，aapt dump 出来
-        # 仍写着 versionName='1.0'）。不盖一下，手机上"关于"里的版本永远对不上标签。
+      - name: 修正 Android 工程（版本 / 明文许可 / 应用身份）
+        # 这些都不属于 www，也不属于 capacitor.config.json，cap add/sync 不会替我们写。
+        # 以前本机脚本和这里各抄一份 sed，CI 那份漏了 usesCleartextTraffic，
+        # 结果 Releases 下载的包连不上本地 http 端点、本机的却可以——两条路线漂移。
+        # 现在两边都调同一个脚本，实现只有一份。
         run: |
           set -euo pipefail
-          V=$(node -p "require('./package.json').version")
-          test -f android/app/build.gradle || { echo "::error::找不到 android/app/build.gradle"; exit 1; }
-          grep -q 'versionName ' android/app/build.gradle || { echo "::error::build.gradle 里没有 versionName，模板变了"; exit 1; }
-          sed -i "s/versionName \".*\"/versionName \"$V\"/" android/app/build.gradle
-          echo "package.json 版本 $V -> build.gradle:"
-          grep -E 'versionCode |versionName ' android/app/build.gradle | sed 's/^/   /'
+          node _tools/prepare-android.mjs
+          grep -E 'versionName ' android/app/build.gradle | sed 's/^/   /'
+          grep -o 'usesCleartextTraffic="true"' android/app/src/main/AndroidManifest.xml | sed 's/^/   /'
 
       - name: 编译 APK
         run: |
