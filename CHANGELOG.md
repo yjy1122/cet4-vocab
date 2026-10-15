@@ -34,6 +34,37 @@ APK 一律从 [Releases](https://github.com/yjy1122/noadic/releases) 取：`late
 
 ---
 
+## [1.3.3] - 2026-10-15
+
+### 修复
+
+- **导入备份报「Unterminated string in JSON at position 4000」**：`onFile` 为了"省时间"，
+  只取文件前 4000 字符 `JSON.parse` 去嗅探这是不是本 App 的备份。而截断点几乎必然落在
+  字符串中间 —— 用户那份 534 词的真实备份有 530,952 字符，第 4000 位正好在
+  `"updatedAt": ` 中间，所以**任何真实备份文件都导不进去**。
+  更糟的是：万一恰好断在结构边界，它会"解析成功"，把一个残缺对象交给 `isBackup` 判断，
+  变成静默错判而不是报错。
+  现在整体解析一次，判断与导入共用同一份结果；不是合法 JSON 时也把话说清楚
+  （哪个文件、断在第几个字符、可以怎么办），不再把 V8 的术语直接丢给用户。
+- 嗅探逻辑做成 `Store.sniffJSON` 纯函数：放在 UI 里就没人测得到
+  （现有 Z13/Z15 直接调 `importJSON`，正好绕过了这段代码，所以漏掉了这个 bug）。
+
+### 测试
+
+- 新增 Z21–Z26 六条断言。其中 Z23 固化"旧写法在这份数据上确实会抛"，
+  这样将来有人改回截断会被立刻抓到。
+- 过程中我自己写错过两条断言，都被抓出来并修正：
+  Z23 原本按 V8 的**错误措辞**匹配（措辞随截断位置变），以及用 `instanceof SyntaxError`
+  判断（沙箱与宿主跨 realm，永远 false）；还有一个 `ok()` 的返回值写成了非空字符串，
+  而 `ok()` 用 `!!cond` 判定 —— 那会变成**假通过**。
+- 用用户真实备份文件端到端验证 9 项全过：识别为备份、534 词全进、11 个单元带回、
+  status 分布与已补全数与备份逐项一致、重复导入不翻倍。
+  （期间一条"进度必须被带回"的断言失败，查下来是**我的前提错了**：那份备份里
+  534 个词全是 `status:new`、0 条作答记录 —— 用户还没开始练。改成
+  "导入后状态 == 备份里的状态"这个正确不变量。）
+
+---
+
 ## [1.3.2] - 2026-10-15
 
 ### 修复
@@ -270,7 +301,8 @@ APK 一律从 [Releases](https://github.com/yjy1122/noadic/releases) 取：`late
 
 ---
 
-[Unreleased]: https://github.com/yjy1122/noadic/compare/v1.3.2...HEAD
+[Unreleased]: https://github.com/yjy1122/noadic/compare/v1.3.3...HEAD
+[1.3.3]: https://github.com/yjy1122/noadic/compare/v1.3.2...v1.3.3
 [1.3.2]: https://github.com/yjy1122/noadic/compare/v1.3.1...v1.3.2
 [1.3.1]: https://github.com/yjy1122/noadic/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/yjy1122/noadic/compare/v1.2.1...v1.3.0

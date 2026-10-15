@@ -1,6 +1,6 @@
 {
   "name": "noadic",
-  "version": "1.3.2",
+  "version": "1.3.3",
   "private": true,
   "description": "noadic（不止词典）：录入去重 / 按单元顺序学习 / 遮罩背诵 / 五题型考核 / 错题闭环（纯本地离线，Capacitor 封装为 Android APK）",
   "main": "index.js",

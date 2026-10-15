@@ -107,11 +107,18 @@ const app = (() => {
     try {
       if (/\.json$/i.test(f.name)) {
         const txt = await f.text();
-        const head = JSON.parse(txt.slice(0, 4000));
-        if (Store.isBackup(head)) {          // 认 app 字段，改名前的旧备份（cet4-engine）也收
+        const sniff = Store.sniffJSON(txt);
+        if (sniff.isBackup) {              // 认 app 字段，改名前的旧备份（cet4-engine）也收
           const r = Store.importJSON(txt);
-          UI.renderProgress(); UI.renderLibrary(); UI.renderScope();
+          UI.renderProgress(); UI.renderLibrary(); UI.renderScope(); UI.fillSettings();
+          Quiz.invalidateEligible();
           return UI.toast(`备份已合并导入：新增 ${r.added}、合并 ${r.merged}、重复 ${r.dup}`);
+        }
+        // 不是合法 JSON 时别把 V8 的术语丢给用户：说清是哪个文件、断在哪、可以怎么办
+        if (sniff.error) {
+          const at = (/at position (\d+)/.exec(sniff.error) || [])[1];
+          throw new Error(`${f.name} 不是合法 JSON${at ? `（第 ${Number(at) + 1} 个字符处断掉）` : ''}。`
+            + `若它是导出的备份，请确认导出过程没被打断；若是词表，请改用 .docx/.csv 或直接把内容粘到文本框。原始信息：${sniff.error}`);
         }
         const res = Parse.json(txt, fillOpts());
         UI.renderPreview(Store.plan(res.candidates, $("#ingest-dedup").value));

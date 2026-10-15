@@ -1061,6 +1061,29 @@ const TEST = String.raw`
       Store.DEFAULT_SETTINGS.reciteMask === "zh" && Store.DEFAULT_SETTINGS.reciteFilter === "all"
       && Store.DEFAULT_SETTINGS.reciteShuffle === false
       && !!Store.load().settings.reciteMask, JSON.stringify([Store.settings.reciteMask, Store.settings.reciteFilter]));
+    /* ---------- 备份嗅探：必须整体解析，不能截断 ----------
+       用户报"导入词库文件显示 Unterminated string in JSON at position 4000"。
+       成因是 app.js 里 JSON.parse(txt.slice(0, 4000)) 去嗅探是不是备份。 */
+    ok("Z21 前提：完整备份确实远超 4000 字符", Store.exportJSON().length > 4000, Store.exportJSON().length + " 字符");
+    ok("Z22 完整备份能被识别为备份（整体解析）", (() => {
+      const s = Store.sniffJSON(Store.exportJSON());
+      return s.isBackup === true && !s.error;
+    })(), Store.sniffJSON(Store.exportJSON()).error);
+    /* 只断言"它会抛"。V8 的措辞随截断位置变（Unterminated string / Unexpected end /
+       Expected double-quoted property name…），按措辞匹配是我上一版的错——
+       那等于把实现的偶然细节写成了断言。
+       注意返回值必须是布尔：ok() 用 !!cond 判定，返回非空字符串会变成假通过。 */
+    const z23 = (() => {
+      const txt = Store.exportJSON();
+      try { JSON.parse(txt.slice(0, 4000)); return [false, "截断解析没抛错（数据太短？前提变了要改数据）"]; }
+      /* 不能用 instanceof SyntaxError：JSON 是宿主注入的，它抛的错属于宿主 realm，
+         而沙箱里有自己的一套内建构造器，跨 realm 的 instanceof 永远为 false。看 name。 */
+      catch (e) { return [!!(e && e.name === "SyntaxError"), (e && e.name) + ": " + String(e.message).slice(0, 60)]; }
+    })();
+    ok("Z23 旧写法（截前 4000 再 parse）在这份备份上确实会抛", z23[0], z23[1]);
+    ok("Z24 词表 JSON 不被误判为备份", Store.sniffJSON('{"words":[{"word":"realm"}]}').isBackup === false, "");
+    ok("Z25 非法 JSON 返回 error 而不是抛出", (() => { const s = Store.sniffJSON('{"words": ['); return s.isBackup === false && !!s.error; })(), "");
+    ok("Z26 改名前的旧备份 app=cet4-engine 仍然认", Store.sniffJSON(JSON.stringify({ app: "cet4-engine", words: [] })).isBackup === true, "");
     void undoBefore;
   })();
 

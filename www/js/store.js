@@ -477,6 +477,18 @@ const Store = (() => {
   function isBackup(obj) {
     return !!obj && APP_IDS.indexOf(obj.app) >= 0 && Array.isArray(obj.words);
   }
+
+  /** 判断一段 JSON 文本是不是本 App 的备份。
+   *  必须整体解析：调用方原先为了"省时间"只 JSON.parse(txt.slice(0, 4000)) 去嗅探，
+   *  而截断点几乎必然落在字符串中间 → 任何真实备份（127 词就有 137KB）都报
+   *  "Unterminated string in JSON at position 4000"；更糟的是万一恰好断在结构边界，
+   *  它会"解析成功"并把残缺对象交给 isBackup，变成静默错判。
+   *  做成纯函数是为了能被回归测试覆盖——放在 UI 里就没人测得到。 */
+  function sniffJSON(txt) {
+    let doc = null;
+    try { doc = JSON.parse(txt); } catch (e) { return { doc: null, isBackup: false, error: (e && e.message) || String(e) }; }
+    return { doc, isBackup: isBackup(doc), error: "" };
+  }
   function exportJSON() {
     return JSON.stringify({ app: "noadic", version: 1, exportedAt: new Date().toISOString(), settings: state.settings, words: state.words }, null, 2);
   }
@@ -518,7 +530,7 @@ const Store = (() => {
     bookWords,                                        // 背诵页要"只背书里的词"，扩展池不该出现在背诵列表
     unitFlags, blockFlags, blockStats, blocks, blockKey, inBlock, wordsOfBlock, resetBlock,
     currentUnit, currentBlock, syncCleared, allCleared, inUnit, gateMet, unclear, resetUnit, labelOrder,
-    snapshot, undo, canUndo, update, remove, scopeWords, scopeStats, removeScope, inScope, setSetting, exportJSON, importJSON, isBackup, wipe, usage,
+    snapshot, undo, canUndo, update, remove, scopeWords, scopeStats, removeScope, inScope, setSetting, exportJSON, importJSON, isBackup, sniffJSON, wipe, usage,
     weakWords, weakCount, toggleWeak, clearWeak,
     DEFAULT_SETTINGS,
   };

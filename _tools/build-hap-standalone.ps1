@@ -8,7 +8,7 @@
   所以把工程复制到 ASCII 目录 + 在非沙箱终端里跑，两个约束同时满足。
 
   用法（重要：在普通的 PowerShell 窗口里跑，不是在 agent 会话里）：
-    cd D:\Users\DawnFish\Desktop\新建文件夹
+    cd <仓库根目录>
     powershell -ExecutionPolicy Bypass -File _tools\build-hap-standalone.ps1
 
   加 -Signed 表示"用我本机 DevEco 生成的证书签名"（需要先配好 signingConfigs）。
@@ -107,7 +107,20 @@ if (-not $Signed) {
   [IO.File]::WriteAllText($prof, $new, (New-Object Text.UTF8Encoding($false)))
 } else {
   Step 5 "使用现有 signingConfigs（须是本机 DevEco 生成的证书）"
-  if ($txt -match 'C:\\Users\\HeHao') { Die "build-profile.json5 里还是别人机器的绝对路径，先在 DevEco 里重新勾选 Automatically sign in" }
+  # 不写死某个用户名去匹配：真正要问的是"这些证书在本机存不存在"。
+  $missing = @()
+  foreach ($k in @('storeFile', 'profile', 'certpath')) {
+    $m = [regex]::Match($txt, ('"' + $k + '":\s*"((?:[^"\\]|\\.)*)"'))
+    if ($m.Success) {
+      $pth = $m.Groups[1].Value -replace '\\\\', '\'
+      if (-not (Test-Path $pth)) { $missing += "$k = $pth" }
+    }
+  }
+  if ($missing.Count) {
+    Write-Host "  本机找不到这些签名材料：" -ForegroundColor Red
+    foreach ($x in $missing) { Write-Host "    $x" }
+    Die "在 DevEco 里 File > Project Structure > Signing Configs 勾选 Automatically sign in 重新生成（登录一次即可），再跑本脚本"
+  }
 }
 
 # ---------- 7. 构建 ----------
