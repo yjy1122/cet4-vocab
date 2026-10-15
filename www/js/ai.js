@@ -109,6 +109,12 @@ const AI = (() => {
     }
     if (!res.ok) throw new Error("端点返回 " + res.status + "：" + (await res.text()).slice(0, 200));
     const j = await res.json();
+    // 有些网关（DeepSeek 的 "Service is too busy" 就是这个形状）会把错误塞进 200 的 body 里。
+    // 不认出来的话只会报"没有 message.content"，把真正的原因藏起来。
+    if (j && j.error) {
+      const em = typeof j.error === "string" ? j.error : (j.error.message || JSON.stringify(j.error));
+      throw new Error("端点以 200 返回了错误体：" + em);
+    }
     const content = j && j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content;
     if (!content) throw new Error("返回体里没有 message.content");
     return content;

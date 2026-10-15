@@ -711,6 +711,41 @@ const TEST = String.raw`
         t(3) === 10 && t(900) === 600 && t("") === 90 && t("abc") === 90 && t(120) === 120,
         [t(3), t(900), t(""), t("abc"), t(120)].join(","));
     }
+
+    /* W14 端点把错误塞进 200 的 body：DeepSeek 实测返回
+       {"error":{"message":"Service is too busy","type":"service_unavailable_error"}}。
+       认不出来就只会报「没有 message.content」，把真原因藏掉。 */
+    await (async () => {
+      const rf = globalThis.fetch;
+      Store.settings.ai = { baseURL: "https://test.local/v1", model: "m", key: "k" };
+      globalThis.fetch = async () => ({
+        ok: true, status: 200,
+        json: async () => ({ error: { message: "Service is too busy. switch to alternative providers", type: "service_unavailable_error" } }),
+        text: async () => "",
+      });
+      let msg = "";
+      try { await AI.chat([{ role: "user", content: "x" }]); msg = "没有抛错"; } catch (e) { msg = e.message; }
+      globalThis.fetch = rf;
+      Store.settings.ai = { baseURL: "", model: "", key: "" };
+      ok("W14 200 里塞 error 时抛出真实原因", /Service is too busy/.test(msg) && !/message\.content/.test(msg), msg.slice(0, 90));
+    })();
+
+    /* W15 正常返回仍要能拿到 content（防止 W14 的判断把成功路径带偏） */
+    await (async () => {
+      const rf = globalThis.fetch;
+      Store.settings.ai = { baseURL: "https://test.local/v1", model: "m", key: "k" };
+      globalThis.fetch = async () => ({
+        ok: true, status: 200,
+        json: async () => ({ choices: [{ message: { content: '{"words":[]}' } }] }),
+        text: async () => "",
+      });
+      let got = "";
+      try { got = await AI.chat([{ role: "user", content: "x" }]); } catch (e) { got = "抛错:" + e.message; }
+      globalThis.fetch = rf;
+      Store.settings.ai = { baseURL: "", model: "", key: "" };
+      ok("W15 成功路径不受 error 分支影响", got === '{"words":[]}', String(got).slice(0, 60));
+    })();
+
     globalThis.fetch = realFetch;
     Store.settings.ai = { baseURL: "", model: "", key: "" };
   })();
