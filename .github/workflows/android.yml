@@ -124,7 +124,10 @@ jobs:
           keytool -exportcert -alias androiddebugkey -keystore "$KS" -storepass android -file "$TMP"
           [ -s "$TMP" ] || { echo "::error::导不出 keystore 证书（别名或密码不对？）"; exit 1; }
           WANT=$(openssl dgst -sha256 -r "$TMP" | cut -d' ' -f1)
-          GOT=$("${BT}apksigner" verify --print-certs "$APK" | awk -F': ' '/SHA-256 digest/{print tolower($2); exit}')
+          # 不靠字段位置取值：apksigner 不同版本会打印 "SHA-256 digest: …" 或
+          # "V2 Signer: certificate SHA-256 digest: …"，按 ': ' 切第几列会随版本变。
+          # 直接抓 64 位十六进制 —— SHA-1 是 40 位、MD5 是 32 位，不会误抓。
+          GOT=$("${BT}apksigner" verify --print-certs "$APK" | grep -m1 -oE '[0-9a-fA-F]{64}' | tr 'A-F' 'a-f')
           echo "keystore 证书: $WANT"
           echo "APK     证书: $GOT"
           [ -n "$WANT" ] && [ -n "$GOT" ] || { echo "::error::指纹读不到，检查本身失效（这比不一致更危险，因为它会假装通过）"; exit 1; }
