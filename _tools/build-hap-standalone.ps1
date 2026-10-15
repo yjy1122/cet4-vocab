@@ -14,20 +14,40 @@
   加 -Signed 表示"用我本机 DevEco 生成的证书签名"（需要先配好 signingConfigs）。
   默认产出的是**未签名** .hap：结构真实，但装不到手机上（见结尾说明）。
 #>
-param([switch]$Signed, [string]$Work = 'D:\noadic-hap-build')
+param([switch]$Signed, [string]$Work = 'D:\noadic-hap-build', [string]$Tools = '')
 $ErrorActionPreference = 'Stop'
+# 本脚本在 _tools\ 里，所以只要剥一层。上一版剥了两层，$root 变成 Desktop，
+# 于是 .tooling\command-line-tools 永远找不到 —— 而且报错还是空的（见下面）。
 $root = Split-Path -Parent $PSScriptRoot
-$root = Split-Path -Parent $root
 
 function Step($n, $m) { Write-Host ("[{0}] {1}" -f $n, $m) -ForegroundColor Cyan }
 function Die($m) { Write-Host "❌ $m" -ForegroundColor Red; exit 1 }
 
 # ---------- 1. 工具链 ----------
 Step 1 "定位 HarmonyOS 工具链"
-$tc = @($env:COMMANDLINE_TOOLS_HOME, (Join-Path $root '.tooling\command-line-tools'),
-        'D:\noadic-hap-build\command-line-tools', $env:DEVECO_HOME) |
-      Where-Object { $_ -and (Test-Path (Join-Path $_ 'bin\hvigorw.bat')) } | Select-Object -First 1
-if (-not $tc) { Die "找不到 command-line-tools（需要 bin\hvigorw.bat）。已试过：$($tc -join ', ')" }
+# 候选列表要先存成变量再打印。上一版在消息里写 $tc（此时它已经是空），
+# 于是用户只看到"已试过："后面什么都没有 —— 一个查不出原因的报错等于没有报错。
+$cands = @()
+if ($Tools) { $cands += $Tools }
+$cands += @($env:COMMANDLINE_TOOLS_HOME, $env:DEVECO_HOME,
+            (Join-Path $root '.tooling\command-line-tools'),
+            'D:\noadic-hap-build\command-line-tools',
+            'C:\command-line-tools', 'D:\command-line-tools',
+            'C:\Program Files\Huawei\DevEco Studio\tools',
+            'D:\Program Files\Huawei\DevEco Studio\tools')
+# 再扫两个盘的根目录，找名字里带 command-line-tools / DevEco 的
+foreach ($drv in @('C:\', 'D:\')) {
+  Get-ChildItem $drv -Directory -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -match 'command-line-tools|DevEco' } |
+    ForEach-Object { $cands += $_.FullName }
+}
+$cands = $cands | Where-Object { $_ } | Select-Object -Unique
+$tc = $cands | Where-Object { Test-Path (Join-Path $_ 'bin\hvigorw.bat') } | Select-Object -First 1
+if (-not $tc) {
+  Write-Host "找不到 command-line-tools（判据：bin\hvigorw.bat 存在）。已试过这些位置：" -ForegroundColor Red
+  foreach ($c in $cands) { Write-Host ("    {0}  [{1}]" -f $c, $(if (Test-Path (Join-Path $c 'bin\hvigorw.bat')) { '有 hvigorw' } else { '无' }))) }
+  Die "把工具链目录用参数传进来即可：-Tools D:\path\to\command-line-tools`n     （解压 zip 后的顶层目录名是 command-line-tools，要指到它，不是指到 bin）"
+}
 $hvigor = Join-Path $tc 'bin\hvigorw.bat'
 $ohpm = Join-Path $tc 'bin\ohpm.bat'
 $nodeDir = Join-Path $tc 'tool\node'
