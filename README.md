@@ -197,6 +197,7 @@ CI 能替鸿蒙侧站岗的是**静态审计**（`node _tools/audit-harmony.mjs`
 
 ```bash
 node _tools/test-logic.mjs            # 249 项端到端逻辑测试（在 Node vm 里把浏览器模块当无头环境跑）
+node _tools/audit-portability.mjs     # 工具脚本不许写死机器路径（CI 在 Linux 上跑，本机路径是隐形炸弹）
 node _tools/audit-wiring.mjs          # JS 语法 + 全部 #id 选择器对账
 node _tools/xref.mjs                  # 跨模块引用对账（抓"开机即抛"的名字错）
 powershell -ExecutionPolicy Bypass -File _tools\check-workflow.ps1 -SelfTest

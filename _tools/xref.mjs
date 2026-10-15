@@ -1,6 +1,6 @@
 /* 跨模块引用对账：在 vm 里真实加载模块，读取导出键，再扫描源码里的 NS.method 引用 */
-import fs from "node:fs"; import path from "node:path"; import vm from "node:vm";
-const root = "D:\\Users\\DawnFish\\Desktop\\新建文件夹";
+import fs from "node:fs"; import path from "node:path"; import vm from "node:vm"; import { fileURLToPath } from "node:url";
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");   // 不硬编码机器路径，CI 在 Linux 上跑
 const dir = path.join(root, "www", "js");
 const mods = ["seed-words.js", "lexicon.js", "dict-extra.js", "store.js", "parse.js", "distractors.js", "quiz.js", "ai.js", "ui.js", "app.js"];
 const code = mods.map((f) => fs.readFileSync(path.join(dir, f), "utf8")).join("\n;\n");

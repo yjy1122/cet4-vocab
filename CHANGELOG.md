@@ -17,6 +17,15 @@ APK 一律从 [Releases](https://github.com/yjy1122/noadic/releases) 取：`late
 - `sync-www.ps1` 退化为 `_tools/sync-www.mjs` 的转发（实现只留一份，CI 是 Ubuntu）。
 - `check-workflow.ps1` 新增断言：`checks` job 必须存在、必须真跑那 5 个脚本、`apk` 必须 `needs: checks`；变异用例 7 → 9 条。
 
+- **修掉"工具只能在写它的那台机器上跑"**。`audit-wiring.mjs` / `xref.mjs` / `android-res.py` / `make-icons.py` / `parse_seed.py`
+  都把仓库根写成 `D:\Users\...\新建文件夹`。上面那条 checks job 第一次在 CI 跑就失败了 —— 报
+  `ENOENT: scandir 'D:\Users\DawnFish\Desktop\新建文件夹/www/js'`。
+  **这类缺陷不可能靠本机试跑发现**：路径在本机存在，所以本机永远全绿。
+  （我一度用干净 worktree 模拟 CI，结果也是全绿 —— 因为 worktree 还在同一台 Windows 上，
+  那个硬路径照样能解析。模拟环境必须连操作系统一起换才算数。）
+  现在全部从自身位置推导，并新增 `_tools/audit-portability.mjs` 静态扫（已挂进 CI）。
+- 删掉 `_tools/dbg-seq.mjs`、`_tools/peek.mjs`：一次性调试脚手架，无任何引用，且路径写死 —— 留着是地雷。
+
 尚未合并的主张（有变动会挪到上面的版本里）：
 
 - 锁屏方向：`AndroidManifest` 声明了 portrait，但 Capacitor 不锁，横屏时布局会被拉宽

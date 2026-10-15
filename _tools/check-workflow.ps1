@@ -112,7 +112,7 @@ if not chk:
     bad.append("no 'checks' job -> 回归测试不在 CI 里跑")
 else:
     crun = "\n".join(str(s.get("run", "")) for s in chk.get("steps", []))
-    for need in ("test-logic.mjs", "audit-wiring.mjs", "xref.mjs", "notes-extract.sh", "audit-harmony.mjs"):
+    for need in ("test-logic.mjs", "audit-portability.mjs", "audit-wiring.mjs", "xref.mjs", "notes-extract.sh", "audit-harmony.mjs"):
         if need not in crun:
             bad.append("checks job no longer runs " + need)
 if job.get("needs") != "checks" and not (isinstance(job.get("needs"), list) and "checks" in job.get("needs")):

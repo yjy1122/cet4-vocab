@@ -2,7 +2,7 @@
 import os
 from PIL import Image, ImageDraw, ImageFont
 
-ROOT = r"D:\Users\DawnFish\Desktop\新建文件夹"
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))   # 同上，克隆到哪儿都能跑
 ACCENT = (37, 99, 235)        # #2563EB
 ACCENT_D = (30, 64, 175)
 WHITE = (255, 255, 255)

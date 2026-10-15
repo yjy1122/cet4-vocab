@@ -2,8 +2,11 @@
 import fs from "node:fs";
 import path from "node:path";
 import vm from "node:vm";
+import { fileURLToPath } from "node:url";
 
-const root = "D:\\Users\\DawnFish\\Desktop\\新建文件夹";
+/* 仓库根从本文件位置推导。这里原先硬编码某台机器的绝对路径，
+   于是 CI（Ubuntu）一跑就 ENOENT，而本机永远发现不了。 */
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const jsFiles = fs.readdirSync(path.join(root, "www/js")).filter((f) => f.endsWith(".js")).map((f) => "www/js/" + f);
 const html = fs.readFileSync(path.join(root, "www/index.html"), "utf8");
 const css = fs.readFileSync(path.join(root, "www/css/app.css"), "utf8");

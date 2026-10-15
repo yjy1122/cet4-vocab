@@ -25,6 +25,11 @@ jobs:
       - name: 逻辑回归（vm 沙箱跑浏览器模块）
         run: node _tools/test-logic.mjs
 
+      - name: 工具可移植性（不许写死机器路径）
+        # 本轮 CI 就是被这个弄失败的：audit-wiring / xref 把仓库根硬编码成
+        # "D:\Users\...\新建文件夹"，在 Windows 上永远跑得通，Ubuntu 上直接 ENOENT。
+        run: node _tools/audit-portability.mjs
+
       - name: DOM 接线审计 / 跨模块引用对账
         run: |
           node _tools/audit-wiring.mjs

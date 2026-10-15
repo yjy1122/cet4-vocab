@@ -3,7 +3,7 @@ import os
 import sys
 from PIL import Image
 
-ROOT = r"D:\Users\DawnFish\Desktop\新建文件夹"
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))   # 不写死机器路径：别人克隆下来要能跑
 SRC_ICON = os.path.join(ROOT, "assets", "icon.png")
 SRC_SPLASH = os.path.join(ROOT, "assets", "splash.png")
 RES = os.path.join(ROOT, "android", "app", "src", "main", "res")

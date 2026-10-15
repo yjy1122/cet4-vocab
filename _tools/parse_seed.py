@@ -1,9 +1,11 @@
+import os, sys
 import re, json, io
 from docx import Document
 
-SRC = r"D:\Users\DawnFish\Desktop\样例.docx"
-OUT_JS = r"D:\Users\DawnFish\Desktop\新建文件夹\www\js\seed-words.js"
-OUT_LIST = r"D:\Users\DawnFish\Desktop\新建文件夹\_tools\wordlist.txt"
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+SRC = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(_ROOT), "样例.docx")   # 桌面那份 Word 原件
+OUT_JS = os.path.join(_ROOT, "www", "js", "seed-words.js")
+OUT_LIST = os.path.join(_ROOT, "_tools", "wordlist.txt")
 
 POS_MARKERS = ["n.", "v.", "adj.", "adv.", "prep.", "conj.", "pron.", "num.", "int.", "art.", "aux.", "abbr.", "a.", "ad."]
 POS_RE = re.compile(r"(n|v|adj|adv|prep|conj|pron|num|int|art|aux|abbr|a|ad)\.")
