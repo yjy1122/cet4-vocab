@@ -400,6 +400,9 @@ const app = (() => {
     if (v === "library") UI.renderLibrary();
     if (v === "recite") UI.renderRecite();
     if (v === "wrongbook") UI.renderWrongbook();
+    /* 录入页的钉选下拉在 boot 里被推迟了，切进来时补上。
+       bindPins 自己有 dataset.bound 幂等保护，重复调用不会绑两遍。 */
+    if (v === "ingest") { UI.renderPins(); UI.bindPins(); }
     if (v === "advanced") renderWriting();
   }
   const renderWrongbookSoon = () => { if ($("#view-wrongbook").classList.contains("active")) UI.renderWrongbook(); };
@@ -564,9 +567,18 @@ const app = (() => {
 
   function boot() {
     Store.load();
-    UI.renderProgress(); UI.renderScope(); UI.renderMode(); UI.fillSettings(); UI.renderLibrary(); UI.renderWrongbook(); UI.renderPins(); UI.bindPins();
+    /* 首屏只画"看得见的那一屏"。词库/错题本/设置抽屉在启动时都不可见，
+       但 20 倍降频实测 renderLibrary 要 177ms —— 全堆在首屏前面就是白屏时间。
+       切到对应标签时 switchView 会自己重渲染，所以推迟不会漏画。 */
+    UI.renderProgress(); UI.renderScope(); UI.renderMode();
     bind();
     next();
+    const defer = () => {
+      try { UI.fillSettings(); UI.renderLibrary(); UI.renderWrongbook(); UI.renderPins(); UI.bindPins(); }
+      catch (e) { /* 延后渲染失败不该拖垮已经可用的首屏 */ }
+    };
+    if (typeof requestIdleCallback === "function") requestIdleCallback(defer, { timeout: 1500 });
+    else setTimeout(defer, 0);
     if (!Store.words.length) UI.emptyStage("词库为空。去「录入」粘贴 <code>英文单词 ⇥ 词性及中文释义</code>，或上传 <code>.docx</code>。");
     else {
       const touch = !!(window.matchMedia && matchMedia("(pointer: coarse)").matches);
