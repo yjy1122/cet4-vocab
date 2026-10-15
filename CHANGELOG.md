@@ -9,6 +9,14 @@ APK 一律从 [Releases](https://github.com/yjy1122/noadic/releases) 取：`late
 
 ## [Unreleased]
 
+### 工程 / CI
+
+- **`harmony` 分支已并入 `main`**（纯 fast-forward，零冲突—— harmony 一直定期合 main，main 没有它缺的提交）。此后鸿蒙与安卓在**同一条分支**上开发，不再分叉。
+- **CI 新增 `checks` job，且 `apk` 依赖它**：249 项逻辑测试、DOM 接线审计、跨模块引用对账、发布说明抽取（含负向对照）、鸿蒙静态审计。
+  此前 CI **一条测试都没跑** —— README 挂着"回归测试 249 项"的徽章，但那只是本机行为，一条会弄坏断言的 push 照样发布 APK。
+- `sync-www.ps1` 退化为 `_tools/sync-www.mjs` 的转发（实现只留一份，CI 是 Ubuntu）。
+- `check-workflow.ps1` 新增断言：`checks` job 必须存在、必须真跑那 5 个脚本、`apk` 必须 `needs: checks`；变异用例 7 → 9 条。
+
 尚未合并的主张（有变动会挪到上面的版本里）：
 
 - 锁屏方向：`AndroidManifest` 声明了 portrait，但 Capacitor 不锁，横屏时布局会被拉宽

@@ -115,7 +115,7 @@
 | 移动壳 | **Capacitor 6**（`@capacitor/cli/core/android`） | 唯一需要 Node 的环节，仅用于打包 |
 | 云构建 | **GitHub Actions** + `setup-java` / `setup-android` | push 即出 debug APK 并发布到 Release |
 | AI（可选） | 任意 **OpenAI 兼容**端点（含视觉模型）/ 复制粘贴桥 / 本地意图提取 | 三条通道，契约恒定；Key 只存本机 |
-| 质量 | Node `vm` 沙箱跑浏览器模块 + adb 驱动真机 | 249 项逻辑测试 + 26 条真机断言 + 静态接线审计 + 跨模块引用对账 |
+| 质量 | Node `vm` 沙箱跑浏览器模块 + adb 驱动真机 | 249 项逻辑测试 + 26 条真机断言 + 静态接线审计 + 跨模块引用对账；**CI 先跑完检查才允许出包**（`needs: checks`，检查不过就没有 APK） |
 
 **没有后端。** 全部逻辑与数据都在客户端；AI 调用是你主动配置的可选增强。
 
@@ -179,6 +179,18 @@ https://github.com/yjy1122/noadic/releases/download/latest-debug/app-debug.apk
 2. **本机一键**：`powershell -ExecutionPolicy Bypass -File _tools\toolchain-and-build.ps1`（7 步幂等，工具链装进 `.tooling\`）。
 3. **已有 JDK/SDK**：`npm install && npx cap add android && npx cap sync && cd android && gradlew.bat assembleDebug`。
 
+### 构建鸿蒙包（HAP）
+
+鸿蒙工程在 `harmony/`，与安卓共用同一份 `www/` —— **App 的全部逻辑都是网页**，壳只是一个 ArkWeb `Web` 组件加载 `$rawfile('index.html')`。
+
+```powershell
+powershell -ExecutionPolicy Bypass -File _tools\build-hap.ps1
+```
+
+但要说清楚：**HAP 无法在 CI 或本仓库这台机器上产出**。hvigor 只随 DevEco Studio 分发（npm / npmmirror / ohpm 公共源全 404），SDK 下载页要求华为开发者账号登录（403），签名证书还绑定设备 UDID。所以打包必须在装了 DevEco + 登录过华为账号的机器上做，两条路线与硬约束见 [`BUILD-HAP.md`](BUILD-HAP.md)。
+
+CI 能替鸿蒙侧站岗的是**静态审计**（`node _tools/audit-harmony.mjs`，已挂在 `checks` job 里）：`rawfile` 与 `www/` 逐字节一致、资源引用可解析、身份版本对齐、有没有裸用 `confirm/prompt`（ArkWeb 不提供默认 JS 弹框，不接回调时 `confirm()` 恒为 `false`，删除会静默失败）。
+
 ### 开发自检
 
 ```bash
@@ -186,8 +198,10 @@ node _tools/test-logic.mjs            # 249 项端到端逻辑测试（在 Node 
 node _tools/audit-wiring.mjs          # JS 语法 + 全部 #id 选择器对账
 node _tools/xref.mjs                  # 跨模块引用对账（抓"开机即抛"的名字错）
 powershell -ExecutionPolicy Bypass -File _tools\check-workflow.ps1 -SelfTest
-                                      # 校验 CI 配置；-SelfTest 故意破坏它 6 种，验证这条检查真有牙
-bash _tools/notes-extract.sh          # 发布说明抽取自检：三个版本都要抽到，不存在的版本必须抽不到
+                                      # 校验 CI 配置；-SelfTest 故意破坏它 9 种，验证这条检查真有牙
+bash _tools/notes-extract.sh          # 发布说明抽取自检：每个版本都要抽到，不存在的版本必须抽不到
+node _tools/sync-www.mjs              # 把 www/ 同步进鸿蒙工程的 rawfile/（该目录不入库）
+node _tools/audit-harmony.mjs         # 鸿蒙工程静态审计：资源引用 / 身份版本 / 有没有裸用 confirm
 node _tools/device-smoke.mjs --shots  # 装了模拟器/真机时：26 条端到端断言，全程真实点击
                                       # （--selftest 是同一条负向对照）
 ```

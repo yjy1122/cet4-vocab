@@ -10,8 +10,40 @@ permissions:
   contents: write
 
 jobs:
+  # 先跑检查，不过就不出包。以前 CI 一条测试都没跑：README 上挂着"回归测试 249 项"的徽章，
+  # 但云构建里根本没这一步 —— 一条会弄坏 249 项断言的 push 照样发布 APK。
+  # 这些脚本都是无依赖的纯 Node / bash，所以连 npm install 都不需要。
+  checks:
+    name: 回归与静态检查
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 逻辑回归（vm 沙箱跑浏览器模块）
+        run: node _tools/test-logic.mjs
+
+      - name: DOM 接线审计 / 跨模块引用对账
+        run: |
+          node _tools/audit-wiring.mjs
+          node _tools/xref.mjs
+
+      - name: 发布说明抽取（含负向对照）
+        run: bash _tools/notes-extract.sh
+
+      - name: 鸿蒙工程静态审计
+        # 没人能在 CI 里编 HAP（工具链要华为账号登录、hvigor 不公开分发），
+        # 所以这是鸿蒙侧唯一的自动防线：rawfile 与 www 一致性、资源引用、
+        # 身份版本、有没有裸用 confirm/prompt（ArkWeb 无默认弹框会静默失效）。
+        run: |
+          node _tools/sync-www.mjs
+          node _tools/audit-harmony.mjs
+
   apk:
     name: Debug APK（云构建，本机无需 Android SDK）
+    needs: checks
     runs-on: ubuntu-latest
     steps:
       - name: 检出代码

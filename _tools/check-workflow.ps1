@@ -35,7 +35,11 @@ if ($SelfTest) {
     @{ n = "删掉发布步骤名";   find = "发布到 GitHub Release";             repl = "打个包";                            want = 2 },
     @{ n = "发布说明改回内联（脱离 CHANGELOG）"; find = '--notes-file "$NOTES"'; repl = '--notes "$NOTES"'; want = 2 },
     # 把共享的工程修正步骤换成一句 echo：形状检查必须发现（这条正是 CI 与本机漂移的成因）
-    @{ n = "删掉 prepare-android 步骤"; find = 'node _tools/prepare-android.mjs'; repl = 'echo 打个包'; want = 2 }
+    @{ n = "删掉 prepare-android 步骤"; find = 'node _tools/prepare-android.mjs'; repl = 'echo 打个包'; want = 2 },
+    # 出包不再依赖检查 → 检查失败也会发布，必须被抓
+    @{ n = "解除 apk 对 checks 的依赖"; find = '    needs: checks'; repl = '    needs: nothing'; want = 2 },
+    # 检查 job 里悄悄去掉回归测试，只剩个 echo
+    @{ n = "checks 不再跑回归"; find = 'node _tools/test-logic.mjs'; repl = 'echo 跑过了'; want = 2 }
   )
   $bad = 0
   foreach ($c in $cases) {
@@ -101,6 +105,18 @@ steps = job["steps"]
 print("steps       :", len(steps))
 
 bad = []
+# 检查 job 必须存在、必须真跑回归，而且出包必须依赖它。
+# 少了这三条，"CI 会拦下坏提交"就只是一句愿望——以前 CI 一条测试都不跑。
+chk = d.get("jobs", {}).get("checks")
+if not chk:
+    bad.append("no 'checks' job -> 回归测试不在 CI 里跑")
+else:
+    crun = "\n".join(str(s.get("run", "")) for s in chk.get("steps", []))
+    for need in ("test-logic.mjs", "audit-wiring.mjs", "xref.mjs", "notes-extract.sh", "audit-harmony.mjs"):
+        if need not in crun:
+            bad.append("checks job no longer runs " + need)
+if job.get("needs") != "checks" and not (isinstance(job.get("needs"), list) and "checks" in job.get("needs")):
+    bad.append("apk job does not depend on checks -> 检查失败也会发布 APK")
 if (not isinstance(on, dict) or "push" not in on):
     bad.append("no push trigger")
 perm = (d.get("permissions") or {}).get("contents")
