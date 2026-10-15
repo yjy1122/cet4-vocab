@@ -45,6 +45,17 @@ APK 一律从 [Releases](https://github.com/yjy1122/noadic/releases) 取：`late
 - 词库行上「重置进度」和「删除」两条语句挤在同一行（上一轮行手术的残留），顺手拆开。
 - Service Worker 在鸿蒙容器里不再注册：资源是只读打包进 HAP 的，再套一层缓存只会在更新后继续吐旧 JS。
 - 「直连 API 补全」按钮原先是 `onclick = aiDirect`，第一个实参其实是 Event 对象（靠 `list.length` 恰好为 undefined 才没出错）。改成显式箭头函数。
+- 端点把错误塞进 **200** 的 body 时（DeepSeek 实测返回 `{"error":{"message":"Service is too busy",…}}`），原先只会报「返回体里没有 message.content」，把真原因藏掉。现在认出 error 体并抛出原始信息。
+
+### 用 DeepSeek 实测出来的结论（不是猜测，逐条复现过）
+
+拿真实 Key 对 `https://api.deepseek.com/v1` 跑了一轮，失败是**双峰**的：
+
+- 有时**秒回 503** `service_unavailable_error`「Service is too busy」；
+- 有时**回 200 + `: keep-alive` 空转到永远**，`stream:false` 时连 1 个字节都挤不出来 —— 这就是"点了没反应"的现场，`res.ok` 为真、`res.json()` 永久等待，只有超时能治。
+- 鉴权与模型名校验都正常（非法模型名 400/127ms、非法 Key 401/120ms），余额 `is_available: true`，所以不是 Key 或余额问题。
+- **最关键的一条**：在 App 的 WebView 里，请求**根本没发出去**（`Failed to fetch`）——DeepSeek 不放行浏览器跨域。所以云端 Key 走「直连」在这个 App 里不可能成功，正确通道是**「复制粘贴桥」**（失败状态条上现在直接给了这个按钮）。
+- 顺带一条值得记的测试边界：**「测试连接」只打 `GET /models`，永远不经过 chat**，所以"探测通过"根本证明不了补全能用。
 
 ---
 
