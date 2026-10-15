@@ -15,7 +15,11 @@ $log = Join-Path $t "build.log"
 # 关键：把所有"写到家目录"的缓存都拽进工作区。
 # sdkmanager 下载成功但写不进 %USERPROFILE%\.android\cache 时，会伪装成
 # "IO exception while downloading manifest / Failed to download any source lists"，极易被误判成网络问题。
-$env:ANDROID_USER_HOME = Join-Path $t ".android"
+#
+# 这个目录同时决定 Gradle 用哪把 debug keystore。指进仓库里的 signing\android-home，
+# 本机与 CI 就共用同一把 key；指回 %USERPROFILE% 或 .tooling 会让本机包和发布包签名不一致，
+# 用户覆盖安装被系统拒绝、只能卸载重装丢数据（本轮就是这么发现的）。
+$env:ANDROID_USER_HOME = Join-Path $root "signing\android-home"
 $env:GRADLE_USER_HOME = $gradleHome
 $env:npm_config_cache = Join-Path $t "npm-cache"
 New-Item -ItemType Directory -Force -Path $env:ANDROID_USER_HOME, $env:npm_config_cache | Out-Null

@@ -13,7 +13,7 @@
 [![Download APK](https://img.shields.io/badge/download-APK_直接安装-2ea44f)](https://github.com/yjy1122/noadic/releases/download/latest-debug/app-debug.apk)
 [![Tests](https://img.shields.io/badge/%E5%9B%9E%E5%BD%92%E6%B5%8B%E8%AF%95-249%20%E9%A1%B9-brightgreen)](_tools/test-logic.mjs)
 [![Device](https://img.shields.io/badge/%E7%9C%9F%E6%9C%BA%E6%96%AD%E8%A8%80-26%20%E6%9D%A1-orange)](_tools/device-smoke.mjs)
-[![Changelog](https://img.shields.io/badge/%E6%9B%B4%E6%96%B0%E6%97%A5%E5%BF%97-1.3.1-blue)](CHANGELOG.md)
+[![Changelog](https://img.shields.io/badge/%E6%9B%B4%E6%96%B0%E6%97%A5%E5%BF%97-1.3.2-blue)](CHANGELOG.md)
 ![Zero build](https://img.shields.io/badge/%E6%9E%84%E5%BB%BA%E6%AD%A5%E9%AA%A4-%E6%97%A0%E9%9C%80%E6%89%93%E5%8C%85%E5%99%A8-blueviolet)
 [![License MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 ![PRs Welcome](https://img.shields.io/badge/PRs-welcome-informational)

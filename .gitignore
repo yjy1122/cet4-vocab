@@ -33,3 +33,6 @@ harmony/.clang-tidy
 harmony/**/.test
 harmony/.appanalyzer
 harmony/entry/src/main/resources/rawfile/
+# Android 共用 debug 密钥：只提交 keystore，缓存不入库
+signing/android-home/*
+!signing/android-home/debug.keystore

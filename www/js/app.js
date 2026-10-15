@@ -525,10 +525,19 @@ const app = (() => {
       a.href = URL.createObjectURL(blob);
       a.download = name;
       a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-      // 鸿蒙容器里 <a download> 的产物落进应用私有目录，用户看不到也拿不到（ArkWeb 文档明确）。
-      // 所以额外摊开一份文本让他复制走——备份是本 App 唯一的跨设备迁移动作。
-      if (UI.isArkWeb()) {
-        UI.openCopyBox("复制这份备份", text, `鸿蒙容器里下载的文件不会出现在你能打开的位置。按下面的文件名存好即可：${name}`);
+      const kb = Math.round(text.length / 1024);
+      // 壳内（安卓 Capacitor / 鸿蒙 ArkWeb）<a download> 都不会把文件交给用户：
+      // Capacitor 整个依赖树里没有任何 DownloadListener（实测点完全盘搜不到文件、
+      // 系统下载器也没参与），ArkWeb 则落进应用私有目录。
+      // 备份是这个 App 唯一的跨设备迁移动作，静默失败等于骗人，所以壳内一律摊开文本给复制。
+      if (UI.isNativeShell()) {
+        const where = UI.isArkWeb() ? "鸿蒙" : "安卓";
+        UI.toast(`${where}壳内下载不会落地，已改为可复制的文本`, true, 5000);
+        UI.openCopyBox("复制这份备份", text,
+          `${where}的应用壳不把下载文件交给你（点了不会有任何文件出现）。请长按下面文本框全选复制，`
+          + `存进备忘录或任意文本文件，文件名用：${name}　（约 ${kb} KB）`);
+      } else {
+        UI.toast(`已导出 ${name}（约 ${kb} KB）`);
       }
     };
     $("#btn-import").onchange = onFile;

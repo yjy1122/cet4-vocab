@@ -34,6 +34,39 @@ APK 一律从 [Releases](https://github.com/yjy1122/noadic/releases) 取：`late
 
 ---
 
+## [1.3.2] - 2026-10-15
+
+### 修复
+
+- **导出备份在安卓上也是静默失败的**（不止鸿蒙）。整个依赖树里没有任何 `DownloadListener`，
+  实测点导出后 `find /sdcard -iname '*noadic*'` 一无所获、系统下载器也没参与 ——
+  页面确实生成了 136,780 字符的 blob 并点了 `<a download>`，然后就没有然后了。
+  现在凡是跑在原生壳里（Capacitor 或 ArkWeb）一律摊开文本给一键复制，并说明为什么不能直接下载。
+  真机验证：`isNativeShell()=true`、弹窗打开、文本框 136,780 字符、提示语写明原因与文件名。
+- **每个 CI 包的签名都不一样，升级会被系统拒绝并丢数据。** GitHub runner 是全新机器，
+  Gradle 找不到 `~/.android/debug.keystore` 就**静默现生成一把**、照常构建成功。
+  实测三个包三个指纹：本机 `530aec0d…`、CI v1.3.0 `55ef0b26…`、CI v1.3.1 `1edc8e7a…`。
+  现在仓库内提交共用 debug keystore（`signing/android-home/`），两条构建路线都把
+  `ANDROID_USER_HOME` 指过去；CI 还在构建后用 apksigner 比对指纹，不一致直接失败
+  ——只配环境变量不够，指错了 Gradle 不报错，只会换一把 key。
+- **发布说明里那句"覆盖旧版本不会丢数据（debug 签名一致）"是假的**，
+  而且恰好会在毁掉数据的前一刻让人放心。已改成如实说明，并标明 1.3.1 及更早版本之间升级需先导出。
+
+### 变更
+
+- `prepare-android.mjs` 增加共用 keystore 前置检查（缺失或 `ANDROID_USER_HOME` 指错都直接停）。
+  路径比对走 `realpath`：这台机器上 `D:\noadic-build` 是指向工作区的 junction，
+  第一次按字符串比把正常配置误判成了错配。
+- 删除 `_tools/dbg-seq.mjs`、`_tools/peek.mjs`（一次性调试脚手架，零引用）。
+
+### 注意
+
+**从 v1.3.1 及更早版本升到本版仍需卸载一次**（那些包的 key 不是仓库里这把），
+卸载会清掉本地词库 —— 请先用「导出备份」把文本复制走，装好后用「录入 → 导入 JSON」恢复。
+**此后所有版本签名固定**，覆盖安装不再丢数据。
+
+---
+
 ## [1.3.1] - 2026-10-15
 
 **v1.3.0 的发布包缺一个修复**：明文流量许可只加进了本机构建脚本，没加进 CI workflow —— 于是从 Releases 下载的 APK 连不上本地 `http://` 端点（Ollama 等），而本机构建的却可以。已发布的标签不改写，所以走 1.3.1。
@@ -237,7 +270,8 @@ APK 一律从 [Releases](https://github.com/yjy1122/noadic/releases) 取：`late
 
 ---
 
-[Unreleased]: https://github.com/yjy1122/noadic/compare/v1.3.1...HEAD
+[Unreleased]: https://github.com/yjy1122/noadic/compare/v1.3.2...HEAD
+[1.3.2]: https://github.com/yjy1122/noadic/compare/v1.3.1...v1.3.2
 [1.3.1]: https://github.com/yjy1122/noadic/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/yjy1122/noadic/compare/v1.2.1...v1.3.0
 [1.2.1]: https://github.com/yjy1122/noadic/compare/v1.2.0...v1.2.1

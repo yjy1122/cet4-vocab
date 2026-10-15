@@ -892,6 +892,14 @@ const UI = (() => {
   function isArkWeb() {
     return /OpenHarmony|ArkWeb|HarmonyOS/i.test((typeof navigator !== "undefined" && navigator.userAgent) || "");
   }
+  /* 是否跑在原生壳里（安卓 Capacitor / 鸿蒙 ArkWeb）。
+     两类壳都不能把 <a download> 的文件交给用户：
+     Capacitor 整个依赖树里没有任何 DownloadListener（实测点导出后全盘搜不到文件、
+     logcat 里系统下载器完全没参与），ArkWeb 则是落进应用私有目录。
+     浏览器/PWA 里下载是真能用的，所以只有壳内才需要复制兜底。 */
+  function isNativeShell() {
+    return !!(typeof window !== "undefined" && (window.Capacitor || /^capacitor:/i.test(location.protocol))) || isArkWeb();
+  }
   function openCopyBox(title, text, hint) {
     $("#modal-title").textContent = title;
     $("#modal-body").innerHTML =
@@ -965,6 +973,6 @@ const UI = (() => {
   const SORT_LABEL = { default: "默认", priority: "错题权重", word: "字母" };
   function cycleSort() { libSort = SORTS[(SORTS.indexOf(libSort) + 1) % SORTS.length]; renderLibrary(); return SORT_LABEL[libSort]; }
 
-  return { $, $$, esc, toast, renderProgress, renderMode, renderSeqBar, renderPlanSeg, renderPins, bindPins, renderStrip, showGate, renderQuestion, renderFeedback, renderLibrary, renderRecite, bindRecite, renderPreview, commit, renderWrongbook, renderScope, openEditor, closeModal, askScopeDelete, scopeShown, fillSettings, renderTypeChecks, speak, emptyStage, TYPE_LABEL, PLAN_LABEL, cycleSort, bindAsk, askConfirm, askPrompt, isArkWeb, openCopyBox, sortLabel: () => SORT_LABEL[libSort] };
+  return { $, $$, esc, toast, renderProgress, renderMode, renderSeqBar, renderPlanSeg, renderPins, bindPins, renderStrip, showGate, renderQuestion, renderFeedback, renderLibrary, renderRecite, bindRecite, renderPreview, commit, renderWrongbook, renderScope, openEditor, closeModal, askScopeDelete, scopeShown, fillSettings, renderTypeChecks, speak, emptyStage, TYPE_LABEL, PLAN_LABEL, cycleSort, bindAsk, askConfirm, askPrompt, isArkWeb, isNativeShell, openCopyBox, sortLabel: () => SORT_LABEL[libSort] };
 })();
 if (typeof window !== "undefined") window.UI = UI;

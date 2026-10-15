@@ -59,7 +59,33 @@ if (fs.existsSync(strPath)) {
   if (label) say(`app_name = ${label[1]} ✅`);
 }
 
-/* ---------- 4. 回读确认：静默没写进去的话，症状极难归因 ---------- */
+/* ---------- 4. debug keystore 必须在（否则 Gradle 会静默换一把） ---------- */
+/* Gradle 找不到 <ANDROID_USER_HOME>/debug.keystore 时不会报错，
+   它会现生成一把、照常构建成功 —— 于是这个包和上一个包签名不同，
+   用户覆盖安装被 Android 拒绝，只能卸载重装，本地存储里的词库和进度全没。
+   症状要等到升级那天才暴露，所以这里必须前置拦下。 */
+const ks = rel('signing', 'android-home', 'debug.keystore');
+if (!fs.existsSync(ks)) {
+  die(`缺少共用 debug keystore：${ks}\n`
+    + '     Gradle 找不到它会自己现生成一把，包能出、但和之前的签名不同，用户升级会被拒绝并丢数据。\n'
+    + '     先确认仓库是否完整（该文件是提交进版本库的），见 signing/README.md');
+}
+say(`共用 keystore 就位：${path.relative(root, ks)}（${fs.statSync(ks).size} 字节）`);
+if (!process.env.ANDROID_USER_HOME) {
+  say('⚠ 当前环境没设 ANDROID_USER_HOME：Gradle 会用 ~/.android，那里可能已有另一把 key');
+} else {
+  /* 必须 realpath 再比：这台机器上 D:\noadic-build 是指向工作区的 ASCII junction，
+     字符串不同但目录相同 —— 直接比会把正常配置误判成错配（第一次就踩了）。 */
+  const real = (p) => { try { return fs.realpathSync(path.resolve(p)); } catch (e) { return path.resolve(p); } };
+  const want = real(process.env.ANDROID_USER_HOME);
+  const have = real(path.dirname(ks));
+  if (want !== have) {
+    die(`ANDROID_USER_HOME 指向 ${want}，但共用 keystore 在 ${have}\n     两边不一致时 Gradle 会用它自己的 key，签名就会和发布包不同。`);
+  }
+  say(`ANDROID_USER_HOME 与 keystore 同目录 ✅（按真实路径比对，junction 不误判）`);
+}
+
+/* ---------- 5. 回读确认：静默没写进去的话，症状极难归因 ---------- */
 const g2 = fs.readFileSync(gradlePath, 'utf8');
 if (!g2.includes(`versionName "${wantVer}"`)) die('versionName 未真正写入 build.gradle');
 const m2 = fs.readFileSync(manPath, 'utf8');
