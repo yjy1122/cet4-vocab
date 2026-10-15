@@ -29,6 +29,21 @@ g = g.replace(/versionName ".*"/, `versionName "${wantVer}"`);
 fs.writeFileSync(gradlePath, g);
 say(`versionName -> ${wantVer}`);
 
+/* ---------- 1b. 把版本注入 www/version.js（App 内"检查更新"要知道自己是几版） ---------- */
+const verPath = rel('www', 'version.js');
+const verTpl = (v) => `/* version.js — 构建时由 _tools/prepare-android.mjs 从 package.json 盖写。
+   不要手改：手改一定会和 package.json 漂掉。
+   读不到它时「检查更新」会明确说"版本号没注入"，而不是拿 undefined 去比较误报有更新。 */
+window.APP_VERSION = "${v}";
+`;
+const curVerTxt = fs.existsSync(verPath) ? fs.readFileSync(verPath, 'utf8') : '';
+const curVer = (/APP_VERSION\s*=\s*"([^"]*)"/.exec(curVerTxt) || [])[1];
+if (curVer !== wantVer) {
+  fs.writeFileSync(verPath, verTpl(wantVer));
+  say(`www/version.js: ${curVer || '(无)'} -> ${wantVer}`);
+} else say(`www/version.js 已是 ${wantVer}`);
+if (!fs.readFileSync(verPath, 'utf8').includes(`"${wantVer}"`)) die('www/version.js 回读不符');
+
 /* ---------- 2. 明文流量许可（本地 http 端点需要） ---------- */
 /* Android 9+ 默认禁明文 http。这一层在 WebView 的 allowMixedContent **之下**：
    实测只开混合内容仍然 Failed to fetch，必须同时有 usesCleartextTraffic。

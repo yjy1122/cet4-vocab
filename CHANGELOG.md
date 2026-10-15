@@ -34,6 +34,44 @@ APK 一律从 [Releases](https://github.com/yjy1122/noadic/releases) 取：`late
 
 ---
 
+## [1.4.0] - 2026-10-15
+
+### 新增
+
+- **检查更新**：设置 → 数据下方「检查 GitHub 新版本」。查 `releases/latest`，
+  有新版就显示版本号、发布日期、**该版本的更新说明**，并给「去下载 APK」与 Releases 链接。
+  另有「启动时自动检查一次」开关，**默认关** —— 本 App 离线可用，不该让网络请求参与启动路径。
+- 版本号由构建流程注入 `www/version.js`（`prepare-android.mjs` 从 package.json 盖写）。
+  读不到时检查更新会明确说「版本号没注入，无法判断」，**而不是拿 undefined 去比较稳定误报有更新**。
+
+### 说明：为什么不做应用内自动安装
+
+安卓不允许应用静默安装自己的更新（需要 `REQUEST_INSTALL_PACKAGES` + FileProvider + 原生下载回调），
+而 `android/` 工程由 `cap add` 生成、不入库，把原生代码写在那儿下次重新生成就没了。
+所以这里是「检查 + 展示改了什么 + 交给系统浏览器下载」，你点一下安装即可；
+签名一致时覆盖安装不丢词库与进度。
+
+前提已实测而非假设：`api.github.com` 在 Capacitor WebView 内可跨域访问
+（`/releases/latest` 返回 200，且正确排除预发布版 `latest-debug`）。
+真机验证 8 项全过：已最新 / 伪装旧版报出更新并渲染说明 / 下载链接指向 .apk 直链 /
+断网时不崩且给出可读指引。
+
+### 修复
+
+- 更新说明原本把 Markdown 原样塞进 `<pre>`，界面上会露出 `###`、`**`、反引号（截图里就是这样）。
+  加了 `Update.mdLite` 做最小转换：先转义再还原粗体/斜体/列表/链接，
+  链接展开成「文字（URL）」而不是注入 `<a>`。
+  `U12` 专门验外部内容里的 HTML 不会被放行（先转义后还原，顺序错了就是 XSS 口子）。
+
+### 测试
+
+- 逻辑测试 255 → **268 项**：新增 `U1–U13`（版本比较含 `1.10.0 > 1.9.9` 这种非字符串序情形、
+  tag 解析容错、限流 403 单独分类、断网不抛错、响应非 JSON 不崩、mdLite 三条）。
+- `xref` 的模块清单补上 `Update`：它原先看不到这个命名空间，跨模块引用等于没被对账。
+- 过程中我自己把测试文件写崩过一次：在 `String.raw` 模板里写了裸反引号，直接截断模板。
+
+---
+
 ## [1.3.3] - 2026-10-15
 
 ### 修复
@@ -301,7 +339,8 @@ APK 一律从 [Releases](https://github.com/yjy1122/noadic/releases) 取：`late
 
 ---
 
-[Unreleased]: https://github.com/yjy1122/noadic/compare/v1.3.3...HEAD
+[Unreleased]: https://github.com/yjy1122/noadic/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/yjy1122/noadic/compare/v1.3.3...v1.4.0
 [1.3.3]: https://github.com/yjy1122/noadic/compare/v1.3.2...v1.3.3
 [1.3.2]: https://github.com/yjy1122/noadic/compare/v1.3.1...v1.3.2
 [1.3.1]: https://github.com/yjy1122/noadic/compare/v1.3.0...v1.3.1

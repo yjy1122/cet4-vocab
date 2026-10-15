@@ -415,6 +415,47 @@ const app = (() => {
   const renderWrongbookSoon = () => { if ($("#view-wrongbook").classList.contains("active")) UI.renderWrongbook(); };
 
   /* ---------------- 绑定 ---------------- */
+  /* ---------------- 检查更新 ----------------
+     必须放在模块作用域：boot() 的延后块里也要调它（自动检查），
+     定义在 bind() 内部的话 boot() 根本看不见，自动检查会静默失效。 */
+  let checkingUpdate = false;
+  async function runUpdateCheck(auto) {
+    if (checkingUpdate) return;
+    checkingUpdate = true;
+    const st = $("#update-state"), detail = $("#update-detail");
+    if (!st || !detail) { checkingUpdate = false; return; }
+    st.className = "mini muted"; st.textContent = auto ? "启动检查中…" : "检查中…";
+    let r;
+    try { r = await Update.check(); }
+    catch (e) { r = { state: "error", msg: "检查更新时出了意外：" + ((e && e.message) || e) }; }
+    st.textContent = "";
+    if (r.state === "update") {
+      st.className = "mini warn";
+      st.textContent = `发现新版本 ${r.latest}（当前 ${r.current}）`;
+      detail.classList.remove("hidden");
+      detail.innerHTML = `<div class="upd-head"><b>${UI.esc(r.name || ("v" + r.latest))}</b>`
+        + (r.published ? `<span class="muted small">　发布于 ${UI.esc(r.published)}</span>` : "") + `</div>`
+        + `<pre class="upd-notes">${Update.mdLite(String(r.notes || "（该版本没有填写更新说明）").slice(0, 1800))}</pre>`
+        + `<div class="row"><button class="primary" id="btn-goto-dl">去下载 APK</button>`
+        + `<a class="ghost" id="btn-goto-rel" href="${UI.esc(r.url)}" target="_blank" rel="noopener">在浏览器里看 Releases</a></div>`
+        + `<p class="muted small">下载后点开安装即可。签名一致时覆盖安装不会丢词库和进度；若系统提示"未知来源"，允许这一次就行。</p>`;
+      const go = $("#btn-goto-dl");
+      if (go) go.onclick = () => { window.open(r.dl, "_blank"); };
+      if (auto) UI.toast(`发现新版本 ${UI.esc(r.latest)}，去「设置 → 检查更新」看改了什么`);
+    } else if (r.state === "latest") {
+      st.className = "mini ok"; st.textContent = `已是最新（${r.current}）`;
+      detail.classList.add("hidden"); detail.innerHTML = "";
+      if (!auto) UI.toast(`当前已是最新版本 ${UI.esc(r.current)}`);
+    } else {
+      st.className = "mini warn";
+      st.textContent = r.state === "unknown" ? "无法判断" : (r.state === "offline" ? "没连上 GitHub" : (r.state === "limited" ? "被限流" : "检查失败"));
+      detail.classList.remove("hidden");
+      detail.innerHTML = `<p class="muted small">${UI.esc(r.msg || "")}</p>`;
+      if (auto) st.textContent += "（已跳过）";
+    }
+    checkingUpdate = false;
+  }
+
   function bind() {
     $$(".tab").forEach((t) => t.addEventListener("click", () => switchView(t.dataset.view)));
     $("#btn-settings").onclick = () => { UI.fillSettings(); $("#drawer").classList.remove("hidden"); $("#drawer-mask").classList.remove("hidden"); };
@@ -520,6 +561,11 @@ const app = (() => {
     $("#set-ai-base").onchange = (e) => { Store.setSetting("ai.baseURL", e.target.value.trim()); resetProbe(); };
     $("#set-ai-model").onchange = (e) => Store.setSetting("ai.model", e.target.value.trim());
     $("#set-ai-key").onchange = (e) => { Store.setSetting("ai.key", e.target.value.trim()); resetProbe(); };
+    /* ---------------- 检查更新（按钮与开关） ---------------- */
+    $("#btn-check-update").onclick = () => runUpdateCheck(false);
+    $("#set-autocheck").checked = !!Store.settings.autoUpdateCheck;
+    $("#set-autocheck").onchange = (e) => Store.setSetting("autoUpdateCheck", e.target.checked);
+    $("#update-repo").textContent = Update.REPO;
     $("#set-ai-timeout").onchange = (e) => {
       const n = Math.min(600, Math.max(10, +e.target.value || 90));
       Store.setSetting("ai.timeout", n);
@@ -583,6 +629,9 @@ const app = (() => {
     const defer = () => {
       try { UI.fillSettings(); UI.renderLibrary(); UI.renderWrongbook(); UI.renderPins(); UI.bindPins(); }
       catch (e) { /* 延后渲染失败不该拖垮已经可用的首屏 */ }
+      /* 自动检查更新：只在开关打开时做，且排在首屏之后 —— 本 App 离线可用，
+         不该让一次网络请求参与启动路径。 */
+      try { if (Store.settings.autoUpdateCheck) runUpdateCheck(true); } catch (e) { }
     };
     if (typeof requestIdleCallback === "function") requestIdleCallback(defer, { timeout: 1500 });
     else setTimeout(defer, 0);

@@ -2,7 +2,7 @@
 import fs from "node:fs"; import path from "node:path"; import vm from "node:vm"; import { fileURLToPath } from "node:url";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");   // 不硬编码机器路径，CI 在 Linux 上跑
 const dir = path.join(root, "www", "js");
-const mods = ["seed-words.js", "lexicon.js", "dict-extra.js", "store.js", "parse.js", "distractors.js", "quiz.js", "ai.js", "ui.js", "app.js"];
+const mods = ["seed-words.js", "lexicon.js", "dict-extra.js", "store.js", "parse.js", "distractors.js", "quiz.js", "ai.js", "update.js", "ui.js", "app.js"];
 const code = mods.map((f) => fs.readFileSync(path.join(dir, f), "utf8")).join("\n;\n");
 const mem = new Map();
 const sb = { console, JSON, Math, Date, RegExp, Set, Map, Array, Object, String, Number, Promise, Error, Proxy, Reflect, Boolean, Symbol, parseInt, parseFloat, isNaN, TextDecoder, Blob, Response, DecompressionStream, structuredClone, setTimeout, clearTimeout, fetch,
@@ -16,7 +16,7 @@ sb.window = sb; sb.self = sb; sb.globalThis = sb;
 vm.createContext(sb);
 vm.runInContext(code, sb, { filename: "bundle.js" });
 
-const NS = ["UI", "app", "Store", "Quiz", "Lex", "Parse", "Distract", "AI", "Writing"];
+const NS = ["UI", "app", "Store", "Quiz", "Lex", "Parse", "Distract", "AI", "Writing", "Update"];
 const exportsOf = {};
 for (const n of NS) exportsOf[n] = sb[n] ? Object.keys(sb[n]) : null;
 

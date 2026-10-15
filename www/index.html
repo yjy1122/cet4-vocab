@@ -299,6 +299,17 @@
       <button class="ghost danger" id="btn-wipe">清空全部</button>
     </div>
     <p class="muted small" id="storage-info"></p>
+
+    <h4>检查更新</h4>
+    <div class="row">
+      <button class="ghost" id="btn-check-update">检查 GitHub 新版本</button>
+      <span class="mini muted" id="update-state">未检查</span>
+    </div>
+    <div id="update-detail" class="update-detail hidden"></div>
+    <label class="mini"><input type="checkbox" id="set-autocheck"> 启动时自动检查一次（默认关；本 App 离线可用，不联网也不影响任何功能）</label>
+    <p class="muted small">更新包托管在 GitHub Releases（<code id="update-repo">yjy1122/noadic</code>）。
+      安卓不允许应用静默安装自己的更新，所以这里只会告诉你有没有新版、改了什么，
+      下载交给系统浏览器，你点一下安装即可；签名一致时覆盖安装不丢词库与进度。</p>
   </aside>
 </main>
 
@@ -335,6 +346,8 @@
 <script src="js/distractors.js"></script>
 <script src="js/quiz.js"></script>
 <script src="js/ai.js"></script>
+<script src="version.js"></script>
+<script src="js/update.js"></script>
 <script src="js/ui.js"></script>
 <script src="js/app.js"></script>
 </body>

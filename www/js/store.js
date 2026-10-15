@@ -36,6 +36,7 @@ const Store = (() => {
     reciteShuffle: false,    // 背诵乱序（避免记住的是位置而不是词）
     types: { e2c: true, c2e: true, cloze: true, poly: true, dictation: true },
     ai: { baseURL: "", model: "", key: "", timeout: 90 },   // timeout 秒：本地大模型首次加载权重可能很慢
+    autoUpdateCheck: false,   // 启动时自动查一次 GitHub 更新；默认关，本 App 离线可用
   };
 
   let state = { words: [], settings: structuredClone(DEFAULT_SETTINGS), meta: { seeded: false, imports: [] } };

@@ -1,10 +1,10 @@
 /* sw.js — 手机/离线挂载点（仅在 http(s) 下生效；file:// 打开时不注册）
  * 更新版本改 APP_VERSION，老缓存会被清掉。 */
-const APP_VERSION = "noadic-v9";   // v2=三级批量删除，v3=判定按钮换行修复+撤销按钮恒可点，v4=背诵页（遮罩 + 背不熟标记），v5=音标在 Android 上吐方框，v6=删除/新建改走页内弹层（鸿蒙无默认 JS 弹框），v7=探测真验生成通道+本地http端点明文许可，v8=安卓导出改走可复制文本+共用 debug keystore，v9=修复导入备份被截断成 4000 字符
+const APP_VERSION = "noadic-v11";   // v2=三级批量删除，v3=判定按钮换行修复+撤销按钮恒可点，v4=背诵页（遮罩 + 背不熟标记），v5=音标在 Android 上吐方框，v6=删除/新建改走页内弹层（鸿蒙无默认 JS 弹框），v7=探测真验生成通道+本地http端点明文许可，v8=安卓导出改走可复制文本+共用 debug keystore，v9=修复导入备份被截断成 4000 字符，v10=检查更新（version.js + update.js），v11=检查更新（GitHub Releases）
 const SHELL = [
-  "./", "./index.html", "./css/app.css", "./manifest.webmanifest", "./icon.svg",
+  "./", "./index.html", "./css/app.css", "./manifest.webmanifest", "./icon.svg", "./version.js",
   "./js/seed-words.js", "./js/lexicon.js", "./js/dict-extra.js", "./js/store.js",
-  "./js/parse.js", "./js/distractors.js", "./js/quiz.js", "./js/ai.js", "./js/ui.js", "./js/app.js",
+  "./js/parse.js", "./js/distractors.js", "./js/quiz.js", "./js/ai.js", "./js/update.js", "./js/ui.js", "./js/app.js",
 ];
 
 self.addEventListener("install", (e) => {

@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
    等于换一台机器/换一个 worktree 就起不来——本项目的 www 与 harmony 分支共用同一套测试。 */
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "..");
-const mods = ["www/js/seed-words.js", "www/js/lexicon.js", "www/js/dict-extra.js", "www/js/store.js", "www/js/parse.js", "www/js/distractors.js", "www/js/quiz.js", "www/js/ai.js"];
+const mods = ["www/js/seed-words.js", "www/js/lexicon.js", "www/js/dict-extra.js", "www/js/store.js", "www/js/parse.js", "www/js/distractors.js", "www/js/quiz.js", "www/js/ai.js", "www/js/update.js"];
 const code = mods.map((f) => fs.readFileSync(path.join(root, f), "utf8")).join("\n;\n");
 
 const mem = new Map();
@@ -1085,6 +1085,71 @@ const TEST = String.raw`
     ok("Z25 非法 JSON 返回 error 而不是抛出", (() => { const s = Store.sniffJSON('{"words": ['); return s.isBackup === false && !!s.error; })(), "");
     ok("Z26 改名前的旧备份 app=cet4-engine 仍然认", Store.sniffJSON(JSON.stringify({ app: "cet4-engine", words: [] })).isBackup === true, "");
     void undoBefore;
+  })();
+
+  /* ---------- U 检查更新 ---------- */
+  await (async function () {
+    const realFetch = globalThis.fetch;
+    const rel = (tag, assets, extra) => ({
+      ok: true, status: 200,
+      json: async () => Object.assign({ tag_name: tag, name: "noadic " + tag, html_url: "https://x/" + tag, body: "notes", published_at: "2026-10-15T00:00:00Z", assets: assets || [] }, extra || {}),
+    });
+    const apk = [{ name: "app-debug.apk", browser_download_url: "https://dl/app-debug.apk", content_type: "application/vnd.android.package-archive" }];
+
+    ok("U1 版本比较（1.10.0 > 1.9.9，不是字符串序）",
+      Update.cmp("1.10.0", "1.9.9") === 1 && Update.cmp("1.3.3", "1.3.3") === 0 && Update.cmp("1.3.2", "1.3.3") === -1, "");
+    ok("U2 tag 解析容错（v 前缀 / 缺 v / 垃圾）",
+      Update.tagToVer("v1.4.0") === "1.4.0" && Update.tagToVer("1.4.1") === "1.4.1" && Update.tagToVer("latest-debug") === "", "");
+
+    /* 没有版本号时必须明说"无法判断"。拿 undefined 去比较会稳定误报有更新，
+       那是最坏的失败方式：用户以为该升，其实信息根本没有。 */
+    delete APP_VERSION;
+    let r = await Update.check();
+    ok("U3 版本号未注入时判 unknown 而不是误报有更新", r.state === "unknown" && /没注入|无法判断/.test(r.msg), r.state + " " + String(r.msg).slice(0, 50));
+
+    APP_VERSION = "1.3.3";
+    globalThis.fetch = async () => rel("v1.4.0", apk);
+    r = await Update.check();
+    ok("U4 有新版：报版本号并给出 apk 直链", r.state === "update" && r.latest === "1.4.0" && r.dl === "https://dl/app-debug.apk", JSON.stringify(r).slice(0, 120));
+
+    globalThis.fetch = async () => rel("v1.3.3", apk);
+    r = await Update.check();
+    ok("U5 已最新", r.state === "latest" && r.current === "1.3.3", r.state);
+
+    globalThis.fetch = async () => rel("v1.3.2", apk);
+    r = await Update.check();
+    ok("U6 远端更旧也判已最新（不提示「降级」）", r.state === "latest", r.state + " " + r.latest);
+
+    globalThis.fetch = async () => ({ ok: false, status: 403, json: async () => ({}), text: async () => "rate limited" });
+    r = await Update.check();
+    ok("U7 匿名限流(403)单独分类并解释", r.state === "limited" && /速率限制/.test(r.msg), r.state);
+
+    globalThis.fetch = async () => { throw new TypeError("Failed to fetch"); };
+    r = await Update.check();
+    ok("U8 断网不抛错，给出 Releases 兜底路径", r.state === "offline" && /releases/i.test(r.msg), r.state);
+
+    globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => { throw new SyntaxError("bad json"); } });
+    r = await Update.check();
+    ok("U9 响应不是合法 JSON 时不崩", r.state === "error" && /JSON/.test(r.msg), r.state);
+
+    globalThis.fetch = async () => rel("latest-debug", []);
+    r = await Update.check();
+    ok("U10 tag 里没有版本号时报错而不是拿 undefined 比较", r.state === "error" && /tag_name/.test(r.msg), r.state);
+
+    /* mdLite：Release 正文是 Markdown，直接进 <pre> 会露出井号标题、星号粗体、反引号这些记号
+       它是"先转义再还原"，所以必须验外部内容的 HTML 不会被放行。 */
+    const BT = String.fromCharCode(96);   // 不能用裸反引号：本文件在 String.raw 模板里，会被截断
+    const md = Update.mdLite("### 修复\n- **导入报 " + BT + "Unterminated string" + BT + "**：见 <b>x</b>\n*斜体*\n[点我](https://x.test/a)");
+    ok("U11 Markdown 记号清掉、粗体转标签",
+      md.indexOf("###") < 0 && md.indexOf("<b>导入报 Unterminated string</b>") >= 0 && md.indexOf("· ") >= 0 && md.indexOf("*斜体*") < 0,
+      JSON.stringify(md.slice(0, 90)));
+    const evil = Update.mdLite("<img src=x onerror=alert(1)>");
+    ok("U12 先转义后还原：外部 HTML 不会被放行", evil.indexOf("<img") < 0 && /&lt;img/.test(evil), evil);
+    const lk = Update.mdLite("[点我](https://x.test/a)");
+    ok("U13 链接展开成文字+URL（不注入 <a>）", lk.indexOf("<a") < 0 && /点我（https:\/\/x\.test\/a）/.test(lk), lk);
+
+    globalThis.fetch = realFetch;
+    APP_VERSION = "1.3.3";
   })();
 
   window.__RESULT__ = R;
