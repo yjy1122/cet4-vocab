@@ -112,18 +112,23 @@ jobs:
 
       - name: 校验签名与仓库内 keystore 一致
         # 构建后必须验，不能只配环境变量：ANDROID_USER_HOME 指错时 Gradle 不报错，
-        # 它会自己换一个 key 照样构建成功。症状要等到用户升级失败才暴露。
+        # 它会自己换一把 key 照样构建成功。症状要等到用户升级失败才暴露。
+        # 指纹用"导出 DER 再算 SHA-256"，不解析 keytool 的人类可读输出——
+        # 上一版那么干，CI 上 WANT 直接为空，整个检查连诊断都没打印就失败了。
         run: |
           set -euo pipefail
           APK=android/app/build/outputs/apk/debug/app-debug.apk
+          KS=signing/android-home/debug.keystore
           BT=$(ls -d "$ANDROID_HOME"/build-tools/*/ | tail -1)
-          WANT=$(keytool -list -v -keystore signing/android-home/debug.keystore -storepass android 2>/dev/null \
-                 | grep -m1 'Certificate fingerprints' -A1 | grep -o 'SHA256:[^ ]*' | tr -d ':' | tr 'A-F' 'a-f')
-          [ -n "$WANT" ] || { echo "::error::读不到仓库内 keystore 的证书指纹"; exit 1; }
-          GOT=$("${BT}apksigner" verify --print-certs "$APK" | grep -m1 'SHA-256 digest' | awk '{print tolower($NF)}')
+          TMP=$RUNNER_TEMP/ks-cert.der
+          keytool -exportcert -alias androiddebugkey -keystore "$KS" -storepass android -file "$TMP"
+          [ -s "$TMP" ] || { echo "::error::导不出 keystore 证书（别名或密码不对？）"; exit 1; }
+          WANT=$(openssl dgst -sha256 -r "$TMP" | cut -d' ' -f1)
+          GOT=$("${BT}apksigner" verify --print-certs "$APK" | awk -F': ' '/SHA-256 digest/{print tolower($2); exit}')
           echo "keystore 证书: $WANT"
           echo "APK     证书: $GOT"
-          [ "$WANT" = "$GOT" ] || { echo "::error::APK 签名与仓库内 debug keystore 不一致：说明 Gradle 用了别的 key，升级会失败并丢数据"; exit 1; }
+          [ -n "$WANT" ] && [ -n "$GOT" ] || { echo "::error::指纹读不到，检查本身失效（这比不一致更危险，因为它会假装通过）"; exit 1; }
+          [ "$WANT" = "$GOT" ] || { echo "::error::APK 签名与仓库内 debug keystore 不一致：Gradle 用了别的 key，用户升级会被拒并丢数据"; exit 1; }
           echo "✅ 签名一致，覆盖安装不会丢数据"
 
       - name: 上传 APK 产物
