@@ -1,4 +1,4 @@
-﻿<#
+<#
   build-hap.ps1 — 鸿蒙 HAP 打包（本机路线）
 
   和安卓那条路线一样的分工：先把"能不能构建"的前置条件查干净，再交给 hvigor。
@@ -45,7 +45,7 @@ if ($SkipAudit) {
   Step 3 "审计鸿蒙工程（rawfile 一致性 / 资源引用 / 身份版本 / 签名材料 / ArkWeb 前提）"
   & node (Join-Path $root '_tools\audit-harmony.mjs') --net
   if ($LASTEXITCODE -ne 0) {
-    Die "审计未通过。上面每条失败都写了改法；签名材料那几条属于「换机器必然缺」，见 BUILD-HAP.md 第 3 节。"
+    Die "审计未通过。上面每条失败都写了改法；签名材料那几条属于「换机器必然缺」，见 BUILD-HAP.md 的「关于签名，两条硬约束」一节（按标题引用，不写第几节——加一节就会错位）。"
   }
 }
 

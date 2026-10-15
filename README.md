@@ -191,6 +191,8 @@ powershell -ExecutionPolicy Bypass -File _tools\build-hap.ps1
 
 CI 能替鸿蒙侧站岗的是**静态审计**（`node _tools/audit-harmony.mjs`，已挂在 `checks` job 里）：`rawfile` 与 `www/` 逐字节一致、资源引用可解析、身份版本对齐、有没有裸用 `confirm/prompt`（ArkWeb 不提供默认 JS 弹框，不接回调时 `confirm()` 恒为 `false`，删除会静默失败）。
 
+**分支约定**：通用改动只在 `main` 上做；`harmony` 是鸿蒙侧的修复分支 —— main 的改动若在鸿蒙实机上出问题，由适配者在 `harmony` 上合并 main 并修好，再合回 main。规则与判断表见 [`BUILD-HAP.md`](BUILD-HAP.md) 的「分支协作流程」。
+
 ### 开发自检
 
 ```bash
